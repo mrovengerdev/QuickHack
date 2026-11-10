@@ -42,44 +42,6 @@ public final func QuickHack_FillCommands() -> array<ref<QuickhackData>> {
   return commands;
 }
 
-public class QuickHackCrosshair extends IScriptable {
-  public final static func Target(player: ref<GameObject>) -> ref<GameObject> {
-    let angleDistance: EulerAngles;
-    let component: wref<TargetingComponent>;
-    let searchQuery: TargetSearchQuery;
-    if !IsDefined(player) {
-      return null;
-    };
-    TargetSearchQuery.SetComponentFilter(searchQuery, TargetComponentFilterType.QuickHack);
-    searchQuery.searchFilter = TSF_Quickhackable();
-    searchQuery.maxDistance = SNameplateRangesData.GetMaxDisplayRange();
-    component = GameInstance.GetTargetingSystem(player.GetGame()).GetComponentClosestToCrosshair(player, angleDistance, searchQuery) as TargetingComponent;
-    if !IsDefined(component) {
-      return null;
-    };
-    if AbsF(angleDistance.Yaw) > 15.00 || AbsF(angleDistance.Pitch) > 15.00 {
-      return null;
-    };
-    return component.GetEntity() as GameObject;
-  }
-
-  public final static func AngleText(player: ref<GameObject>) -> String {
-    let angleDistance: EulerAngles;
-    let component: wref<TargetingComponent>;
-    let searchQuery: TargetSearchQuery;
-    if !IsDefined(player) {
-      return "";
-    };
-    TargetSearchQuery.SetComponentFilter(searchQuery, TargetComponentFilterType.QuickHack);
-    searchQuery.searchFilter = TSF_Quickhackable();
-    searchQuery.maxDistance = SNameplateRangesData.GetMaxDisplayRange();
-    component = GameInstance.GetTargetingSystem(player.GetGame()).GetComponentClosestToCrosshair(player, angleDistance, searchQuery) as TargetingComponent;
-    if !IsDefined(component) {
-      return "";
-    };
-    return "yaw=" + FloatToStringPrec(angleDistance.Yaw, 2) + " pitch=" + FloatToStringPrec(angleDistance.Pitch, 2);
-  }
-}
 
 public class QuickHackIcons extends IScriptable {
   public final static func AtlasPath(iconID: TweakDBID) -> String {

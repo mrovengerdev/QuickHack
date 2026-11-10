@@ -331,35 +331,6 @@ local function asEntityID(value)
   return nil
 end
 
-local conePrinted = false
-
-local function noteCone(player)
-  if conePrinted or not isDefined(player) then
-    return
-  end
-  local ok, text = pcall(function()
-    return QuickHackCrosshair.AngleText(player)
-  end)
-  if ok and type(text) == "string" and text ~= "" then
-    conePrinted = true
-    print("QuickHack: cone " .. text)
-  end
-end
-
-
-local function crosshairAny()
-  local player = Game.GetPlayer()
-  if not isDefined(player) then
-    return nil
-  end
-  local ok, entity = pcall(function()
-    return QuickHackCrosshair.Target(player)
-  end)
-  if not ok or not isDefined(entity) then
-    return nil
-  end
-  return resolveHackable(entity)
-end
 
 local function showEntity(entity, fallbackKey)
   local list = fillList(entity)
@@ -376,21 +347,6 @@ local function showEntity(entity, fallbackKey)
 end
 
 function Target.onHoverId(value)
-  noteCone(Game.GetPlayer())
-  local cross = crosshairAny()
-  local crossKind = kindOf(cross)
-  if crossKind == "device" or crossKind == "vehicle" then
-    local deviceKey = entityIdKey(cross)
-    if deviceKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
-      return
-    end
-    if showEntity(cross, deviceKey) then
-      return
-    end
-  end
-  if kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle" then
-    clearAll()
-  end
   if value == nil then
     clearAll()
     return
@@ -408,11 +364,7 @@ function Target.onHoverId(value)
     return
   end
   local entity = resolveHackable(findEntity(eid))
-  if not isDefined(entity) or sameEntity(entity, Game.GetPlayer()) then
-    clearAll()
-    return
-  end
-  if kindOf(entity) == "device" or kindOf(entity) == "vehicle" then
+  if not isDefined(entity) or not accept(entity) then
     clearAll()
     return
   end
@@ -485,7 +437,7 @@ function Target.tick(dt)
     local named = readId(Game.GetBlackboardSystem():Get(nameDefs), nameDefs.EntityID)
     if definedId(named) then
       local namedEntity = resolveHackable(findEntity(named))
-      if kindOf(namedEntity) == "puppet" and accept(namedEntity) then
+      if accept(namedEntity) then
         return named
       end
     end
@@ -493,7 +445,7 @@ function Target.tick(dt)
     local looked = readId(Game.GetBlackboardSystem():Get(lookDefs), lookDefs.CurrentVisibleTarget)
     if definedId(looked) then
       local lookedEntity = resolveHackable(findEntity(looked))
-      if kindOf(lookedEntity) == "puppet" and accept(lookedEntity) then
+      if accept(lookedEntity) then
         return looked
       end
     end
