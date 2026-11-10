@@ -398,9 +398,28 @@ function Target.install()
     print("QuickHack: nameplate hook failed: " .. err)
   end
 end
+local shownPrinted = false
+local awayPrinted = false
+local rayMissing = false
+
 local function isObject(entity)
   local kind = kindOf(entity)
   return kind == "device" or kind == "vehicle"
+end
+
+local function facingDot(entity)
+  local player = Game.GetPlayer()
+  local ok, dot = pcall(function()
+    return QuickHackAim.Facing(player, entity)
+  end)
+  if not ok or type(dot) ~= "number" or dot <= -1.5 then
+    if not rayMissing then
+      rayMissing = true
+      print("QuickHack: crosshair ray missing")
+    end
+    return nil
+  end
+  return dot
 end
 
 local function showObject(entity)
@@ -415,18 +434,52 @@ local function showObject(entity)
   return showEntity(entity, key)
 end
 
-local function lookAtObject()
+local function queryLookAt()
   local player = Game.GetPlayer()
   if not isDefined(player) then
     return nil
   end
-  local ok, looked = pcall(function()
+  local ok, entity = pcall(function()
     return QuickHackAim.LookAt(player)
   end)
   if not ok then
     return nil
   end
-  return looked
+  return resolveHackable(entity)
+end
+
+local function queryCrosshair()
+  local player = Game.GetPlayer()
+  if not isDefined(player) then
+    return nil
+  end
+  local ok, entity = pcall(function()
+    return QuickHackAim.Crosshair(player)
+  end)
+  if not ok then
+    return nil
+  end
+  return resolveHackable(entity)
+end
+
+local function pickObject()
+  local looked = queryLookAt()
+  local cross = queryCrosshair()
+  local lookDot = isObject(looked) and facingDot(looked) or nil
+  local crossDot = isObject(cross) and facingDot(cross) or nil
+  if isObject(looked) and (lookDot == nil or lookDot >= 0) then
+    return looked, "look-at", lookDot
+  end
+  if isObject(cross) and (crossDot == nil or crossDot >= 0) then
+    return cross, "crosshair", crossDot
+  end
+  if lookDot ~= nil and lookDot < 0 then
+    return nil, "away", lookDot
+  end
+  if crossDot ~= nil and crossDot < 0 then
+    return nil, "away", crossDot
+  end
+  return nil, nil, nil
 end
 
 function Target.tick(dt)
@@ -487,11 +540,22 @@ function Target.tick(dt)
   end
   if kindOf(lookEntity) == "puppet" and accept(lookEntity) then
     Target.onHoverId(hoverValue)
-  elseif showObject(lookAtObject()) then
-  elseif isObject(hoveredEntity) then
-    clearAll()
-  elseif hoverOk then
-    Target.onHoverId(nil)
+  else
+    local object, source, dot = pickObject()
+    if object ~= nil and showObject(object) then
+      if not shownPrinted then
+        shownPrinted = true
+        print(string.format("QuickHack: object via %s dot=%s", source, dot == nil and "none" or string.format("%.2f", dot)))
+      end
+    elseif isObject(hoveredEntity) then
+      if source == "away" and not awayPrinted then
+        awayPrinted = true
+        print(string.format("QuickHack: look-away dot=%.2f", dot))
+      end
+      clearAll()
+    elseif hoverOk then
+      Target.onHoverId(nil)
+    end
   end
 
   if hidden() then

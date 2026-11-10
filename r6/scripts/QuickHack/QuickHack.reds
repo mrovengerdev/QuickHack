@@ -134,11 +134,59 @@ public class QuickHackIcons extends IScriptable {
 }
 
 public class QuickHackAim extends IScriptable {
+  public final static func Facing(player: ref<GameObject>, entity: ref<GameObject>) -> Float {
+    let origin: Vector4;
+    let forward: Vector4;
+    let target: Vector4;
+    let dx: Float;
+    let dy: Float;
+    let dz: Float;
+    let fx: Float;
+    let fy: Float;
+    let fz: Float;
+    let dLen: Float;
+    let fLen: Float;
+    if !IsDefined(player) || !IsDefined(entity) {
+      return -2.00;
+    };
+    GameInstance.GetTargetingSystem(player.GetGame()).GetDefaultCrosshairData(player, origin, forward);
+    target = entity.GetWorldPosition();
+    dx = target.X - origin.X;
+    dy = target.Y - origin.Y;
+    dz = target.Z - origin.Z;
+    fx = forward.X;
+    fy = forward.Y;
+    fz = forward.Z;
+    fLen = SqrtF(fx * fx + fy * fy + fz * fz);
+    dLen = SqrtF(dx * dx + dy * dy + dz * dz);
+    if fLen < 0.05 || dLen < 0.25 {
+      return -2.00;
+    };
+    return (fx * dx + fy * dy + fz * dz) / (fLen * dLen);
+  }
+
   public final static func LookAt(player: ref<GameObject>) -> ref<GameObject> {
     if !IsDefined(player) {
       return null;
     };
-    return GameInstance.GetTargetingSystem(player.GetGame()).GetLookAtObject(player, false, false);
+    return GameInstance.GetTargetingSystem(player.GetGame()).GetLookAtObject(player);
+  }
+
+  public final static func Crosshair(player: ref<GameObject>) -> ref<GameObject> {
+    let angleDistance: EulerAngles;
+    let component: wref<TargetingComponent>;
+    let searchQuery: TargetSearchQuery;
+    if !IsDefined(player) {
+      return null;
+    };
+    TargetSearchQuery.SetComponentFilter(searchQuery, TargetComponentFilterType.QuickHack);
+    searchQuery.searchFilter = TSF_Quickhackable();
+    searchQuery.maxDistance = SNameplateRangesData.GetMaxDisplayRange();
+    component = GameInstance.GetTargetingSystem(player.GetGame()).GetComponentClosestToCrosshair(player, angleDistance, searchQuery) as TargetingComponent;
+    if !IsDefined(component) {
+      return null;
+    };
+    return component.GetEntity() as GameObject;
   }
 }
 
