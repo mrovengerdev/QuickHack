@@ -185,23 +185,93 @@ local function copyCommands(src)
   return list
 end
 
-local function fillNow(entity)
+local function methodMissing(err)
+  local text = tostring(err)
+  return string.find(text, "QuickHack_FillCommands", 1, true) ~= nil
+    or string.find(text, "attempt to call", 1, true) ~= nil
+end
+
+local function ownerOf(entity)
+  local ok, owner = pcall(function()
+    return entity:GetVehicle()
+  end)
+  if ok and isDefined(owner) then
+    return owner
+  end
+  ok, owner = pcall(function()
+    return entity:GetOwner()
+  end)
+  if ok and isDefined(owner) then
+    return owner
+  end
+  return nil
+end
+
+local function kindOf(entity)
+  if not isDefined(entity) or sameEntity(entity, Game.GetPlayer()) then
+    return nil
+  end
+  local okDev, isDev = pcall(function()
+    return entity:IsDevice()
+  end)
+  if okDev and isDev == true then
+    return "device"
+  end
+  local okVeh, isVeh = pcall(function()
+    return entity:IsVehicle()
+  end)
+  if okVeh and isVeh == true then
+    return "vehicle"
+  end
+  local okPup, isPup = pcall(function()
+    return entity:IsPuppet()
+  end)
+  if okPup and isPup == true then
+    return "puppet"
+  end
+  return "other"
+end
+
+local function resolveHackable(entity)
+  local kind = kindOf(entity)
+  if kind == "device" or kind == "vehicle" or kind == "puppet" then
+    return entity
+  end
+  local owner = ownerOf(entity)
+  if kindOf(owner) == "device" or kindOf(owner) == "vehicle" then
+    return owner
+  end
+  return entity
+end
+local function fillList(entity)
   local ok, filled = pcall(function()
     return entity:QuickHack_FillCommands()
   end)
   fillCount = fillCount + 1
-  nextFillAt = os.clock() + 0.25
   if not ok then
     local msg = tostring(filled)
     if not seenFillErrors[msg] then
       seenFillErrors[msg] = true
       print("QuickHack: QuickHack_FillCommands failed: " .. msg)
     end
+    return nil, msg
+  end
+  local list = copyCommands(filled)
+  if #list == 0 then
+    return nil, "empty"
+  end
+  return list, nil
+end
+
+local function fillNow(entity)
+  local list = fillList(entity)
+  nextFillAt = os.clock() + 0.25
+  if list == nil then
     commands = {}
     generation = generation + 1
     return
   end
-  commands = copyCommands(filled)
+  commands = list
   targetId = entityIdKey(entity)
   generation = generation + 1
 end
@@ -214,7 +284,19 @@ local function accept(entity)
   local ok, can = pcall(function()
     return entity:CanRevealRemoteActionsWheel()
   end)
-  return ok and can == true
+  if ok and can == true then
+    return true
+  end
+  local okDev, isDev = pcall(function()
+    return entity:IsDevice()
+  end)
+  if okDev and isDev == true then
+    return true
+  end
+  local okVeh, isVeh = pcall(function()
+    return entity:IsVehicle()
+  end)
+  return okVeh and isVeh == true
 end
 
 local function findEntity(eid)
@@ -249,7 +331,88 @@ local function asEntityID(value)
   return nil
 end
 
+local crosshairConfirmed = {}
+
+local function crosshairAny()
+  local player = Game.GetPlayer()
+  if not isDefined(player) then
+    return nil
+  end
+  local ok, entity = pcall(function()
+    return QuickHackCrosshair.Target(player)
+  end)
+  if not ok or not isDefined(entity) then
+    return nil
+  end
+  return resolveHackable(entity)
+end
+
+local function lookAtDevice()
+  local player = Game.GetPlayer()
+  if not isDefined(player) then
+    return nil
+  end
+  local ok, entity = pcall(function()
+    return Game.GetTargetingSystem():GetLookAtObject(player, false, false)
+  end)
+  if not ok then
+    return nil
+  end
+  entity = resolveHackable(entity)
+  local kind = kindOf(entity)
+  if kind == "device" or kind == "vehicle" then
+    return entity
+  end
+  return nil
+end
+
+
+
+local function showEntity(entity, fallbackKey)
+  local list = fillList(entity)
+  if list == nil then
+    return false
+  end
+  hoveredKey = entityIdKey(entity) or fallbackKey
+  hoveredEntity = entity
+  targetId = hoveredKey
+  commands = list
+  generation = generation + 1
+  nextFillAt = os.clock() + 0.25
+  return true
+end
+
 function Target.onHoverId(value)
+  local cross = crosshairAny()
+  local crossKind = kindOf(cross)
+  if crossKind == "device" or crossKind == "vehicle" then
+    local deviceKey = entityIdKey(cross)
+    crosshairConfirmed[deviceKey] = true
+    if deviceKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
+      return
+    end
+    if showEntity(cross, deviceKey) then
+      return
+    end
+  end
+  local looked = lookAtDevice()
+  if isDefined(looked) then
+    local lookedKey = entityIdKey(looked)
+    local crossKey = entityIdKey(cross)
+    local leftConfirmed = crosshairConfirmed[lookedKey] and not isDefined(cross)
+    local movedCrosshair = crossKey ~= nil and crossKey ~= lookedKey
+    if not leftConfirmed and not movedCrosshair then
+      if lookedKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
+        return
+      end
+      if showEntity(looked, lookedKey) then
+        return
+      end
+    end
+  end
+  if kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle" then
+    clearAll()
+  end
   if value == nil then
     clearAll()
     return
@@ -263,21 +426,20 @@ function Target.onHoverId(value)
     return
   end
   local key = tostring(eid.hash)
-  if key == hoveredKey and isDefined(hoveredEntity) then
+  if key == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
     return
   end
-  local entity = findEntity(eid)
-  if not accept(entity) then
+  local entity = resolveHackable(findEntity(eid))
+  if not isDefined(entity) or sameEntity(entity, Game.GetPlayer()) then
     clearAll()
     return
   end
-  hoveredKey = key
-  hoveredEntity = entity
-  targetId = key
-  commands = {}
-  generation = generation + 1
-  if not hidden() then
-    fillNow(entity)
+  if kindOf(entity) == "device" or kindOf(entity) == "vehicle" then
+    clearAll()
+    return
+  end
+  if not showEntity(entity, key) then
+    clearAll()
   end
 end
 
@@ -340,25 +502,22 @@ function Target.tick(dt)
       end
       return nil
     end
-    local lookDefs = Game.GetAllBlackboardDefs().UI_TargetingInfo
-    local looked = readId(Game.GetBlackboardSystem():Get(lookDefs), lookDefs.CurrentVisibleTarget)
-    if definedId(looked) then
-      return looked
-    end
+
     local nameDefs = Game.GetAllBlackboardDefs().UI_NameplateData
     local named = readId(Game.GetBlackboardSystem():Get(nameDefs), nameDefs.EntityID)
     if definedId(named) then
-      local namedEntity = findEntity(named)
-      if accept(namedEntity) then
+      local namedEntity = resolveHackable(findEntity(named))
+      if kindOf(namedEntity) == "puppet" and accept(namedEntity) then
         return named
       end
     end
-    local player = Game.GetPlayer()
-    local lookOk, lookedObject = pcall(function()
-      return Game.GetTargetingSystem():GetLookAtObject(player, false, false)
-    end)
-    if lookOk and accept(lookedObject) then
-      return lookedObject:GetEntityID()
+    local lookDefs = Game.GetAllBlackboardDefs().UI_TargetingInfo
+    local looked = readId(Game.GetBlackboardSystem():Get(lookDefs), lookDefs.CurrentVisibleTarget)
+    if definedId(looked) then
+      local lookedEntity = resolveHackable(findEntity(looked))
+      if kindOf(lookedEntity) == "puppet" and accept(lookedEntity) then
+        return looked
+      end
     end
     return nil
   end)
@@ -391,11 +550,9 @@ function Target.onCommands(value)
   if key == nil then
     return
   end
-  if hoveredKey ~= nil and key ~= hoveredKey then
+  if hoveredKey == nil or key ~= hoveredKey then
     return
   end
-  hoveredKey = key
-  hoveredEntity = value.lookAtObject
   targetId = key
   if value.shouldReveal == false then
     commands = {}
