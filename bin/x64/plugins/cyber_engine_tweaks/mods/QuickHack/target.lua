@@ -383,25 +383,28 @@ local function showEntity(entity, fallbackKey)
 end
 
 function Target.onHoverId(value)
-  local function behind(entity)
+  local function aim(entity)
     if kindOf(entity) ~= "device" and kindOf(entity) ~= "vehicle" then
-      return false
+      return "other"
     end
     local player = Game.GetPlayer()
     local ok, dot = pcall(function()
       return QuickHackAim.Dot(player, entity)
     end)
     if not ok or type(dot) ~= "number" then
-      return false
+      return "unknown"
     end
-    return dot < 0
+    if dot < 0 then
+      return "away"
+    end
+    return "look"
   end
-  if behind(hoveredEntity) then
+  if aim(hoveredEntity) ~= "look" and (kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle") then
     clearAll()
   end
   local cross = crosshairAny()
   local crossKind = kindOf(cross)
-  if (crossKind == "device" or crossKind == "vehicle") and not behind(cross) then
+  if (crossKind == "device" or crossKind == "vehicle") and aim(cross) == "look" then
     local deviceKey = entityIdKey(cross)
     crosshairConfirmed[deviceKey] = true
     if deviceKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
@@ -412,7 +415,7 @@ function Target.onHoverId(value)
     end
   end
   local looked = lookAtDevice()
-  if isDefined(looked) and not behind(looked) then
+  if isDefined(looked) and aim(looked) == "look" then
     local lookedKey = entityIdKey(looked)
     local crossKey = entityIdKey(cross)
     local leftConfirmed = crosshairConfirmed[lookedKey] and not isDefined(cross)
@@ -425,7 +428,7 @@ function Target.onHoverId(value)
         return
       end
     end
-  elseif isDefined(looked) and behind(looked) then
+  elseif isDefined(looked) then
     clearAll()
   end
   if kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle" then

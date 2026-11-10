@@ -271,16 +271,25 @@ local function paintRam(slot, command)
   local unaffordable = available ~= nil and cost > available
   slot.ramText:SetTintColor(unaffordable and RED or NUMBER_TINT)
   slot.ramText:SetVisible(true)
-  if slot.frame ~= nil then
-    slot.frame:SetTintColor(unaffordable and RED or NUMBER_TINT)
-    slot.frame:SetOpacity(unaffordable and 0.9 or 0.4)
-    slot.frame:SetVisible(true)
+  local edgeColor = unaffordable and RED or NUMBER_TINT
+  if slot.edges ~= nil then
+    local edge = 1
+    while slot.edges[edge] ~= nil do
+      slot.edges[edge]:SetTintColor(edgeColor)
+      slot.edges[edge]:SetOpacity(0.75)
+      slot.edges[edge]:SetVisible(true)
+      edge = edge + 1
+    end
   end
 end
 
 local function hideSlot(slot)
-  if slot.frame ~= nil then
-    slot.frame:SetVisible(false)
+  if slot.edges ~= nil then
+    local edge = 1
+    while slot.edges[edge] ~= nil do
+      slot.edges[edge]:SetVisible(false)
+      edge = edge + 1
+    end
   end
   if slot.placeholder ~= nil then
     slot.placeholder:SetVisible(false)
@@ -317,8 +326,13 @@ local function showSlot(slot, command)
   slot.number:SetVisible(true)
   slot.title:SetVisible(true)
   slot.title:SetText(optionText(command))
-  if slot.frame ~= nil then
-    slot.frame:SetVisible(true)
+  if slot.edges ~= nil then
+    local edge = 1
+    while slot.edges[edge] ~= nil do
+      slot.edges[edge]:SetOpacity(0.75)
+      slot.edges[edge]:SetVisible(true)
+      edge = edge + 1
+    end
   end
   applyIcon(slot, command)
   slot.placeholder:SetOpacity(opacity)
@@ -354,13 +368,32 @@ local function build()
   local i = 1
   while i <= SLOT_COUNT do
     local x = (i - 1) * STRIDE
-    local frame = inkRectangle.new()
-    frame:SetAnchor(inkEAnchor.TopLeft)
-    place(frame, x + 8, ICON_Y - 2, ICON + 4, ICON + 4)
-    frame:SetTintColor(NUMBER_TINT)
-    frame:SetOpacity(0.45)
-    frame:SetVisible(false)
-    frame:Reparent(canvas, -1)
+    local edges = {}
+    local thickness = 2
+    local frameX = x + 8
+    local frameY = ICON_Y - 2
+    local frameW = ICON + 4
+    local frameH = ICON + 4
+    local edge = 1
+    while edge <= 4 do
+      local bar = inkRectangle.new()
+      bar:SetAnchor(inkEAnchor.TopLeft)
+      if edge == 1 then
+        place(bar, frameX, frameY, frameW, thickness)
+      elseif edge == 2 then
+        place(bar, frameX, frameY + frameH - thickness, frameW, thickness)
+      elseif edge == 3 then
+        place(bar, frameX, frameY, thickness, frameH)
+      else
+        place(bar, frameX + frameW - thickness, frameY, thickness, frameH)
+      end
+      bar:SetTintColor(NUMBER_TINT)
+      bar:SetOpacity(0.75)
+      bar:SetVisible(false)
+      bar:Reparent(canvas, -1)
+      edges[edge] = bar
+      edge = edge + 1
+    end
 
     local icon = inkImage.new()
     icon:SetAnchor(inkEAnchor.TopLeft)
@@ -374,7 +407,7 @@ local function build()
     slots[i] = {
       placeholder = icon,
       icon = icon,
-      frame = frame,
+      edges = edges,
       number = number,
       title = title,
       ramText = ramText,
@@ -392,7 +425,24 @@ end
 function Hud.install()
 end
 
+function Hud.invalidate()
+  canvas = nil
+  parent = nil
+  slots = {}
+  overflow = nil
+  built = false
+  lastGen = -1
+end
+
 function Hud.ensure()
+  if built and canvas ~= nil then
+    local alive = pcall(function()
+      canvas:GetName()
+    end)
+    if not alive then
+      Hud.invalidate()
+    end
+  end
   if built then
     return
   end

@@ -144,17 +144,18 @@ public class QuickHackAim extends IScriptable {
     let dz: Float;
     let len: Float;
     if !IsDefined(player) || !IsDefined(entity) {
-      return 1.00;
+      return -1.00;
     };
     forward = GameInstance.GetCameraSystem(player.GetGame()).GetActiveCameraForward();
     origin = player.GetWorldPosition();
+    origin.Z = origin.Z + 1.60;
     target = entity.GetWorldPosition();
     dx = target.X - origin.X;
     dy = target.Y - origin.Y;
     dz = target.Z - origin.Z;
     len = SqrtF(dx * dx + dy * dy + dz * dz);
     if len < 0.05 {
-      return 1.00;
+      return -1.00;
     };
     return (forward.X * dx + forward.Y * dy + forward.Z * dz) / len;
   }

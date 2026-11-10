@@ -27,7 +27,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 20")
+  print("QuickHack ready build 21")
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -41,6 +41,7 @@ end)
 registerForEvent("onUpdate", function(dt)
   local player = Game.GetPlayer()
   if player == nil or not IsDefined(player) then
+    Hud.invalidate()
     return
   end
   Hud.ensure()
