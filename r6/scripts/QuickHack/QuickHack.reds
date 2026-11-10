@@ -57,7 +57,27 @@ public class QuickHackCrosshair extends IScriptable {
     if !IsDefined(component) {
       return null;
     };
+    if AbsF(angleDistance.Yaw) > 15.00 || AbsF(angleDistance.Pitch) > 15.00 {
+      return null;
+    };
     return component.GetEntity() as GameObject;
+  }
+
+  public final static func AngleText(player: ref<GameObject>) -> String {
+    let angleDistance: EulerAngles;
+    let component: wref<TargetingComponent>;
+    let searchQuery: TargetSearchQuery;
+    if !IsDefined(player) {
+      return "";
+    };
+    TargetSearchQuery.SetComponentFilter(searchQuery, TargetComponentFilterType.QuickHack);
+    searchQuery.searchFilter = TSF_Quickhackable();
+    searchQuery.maxDistance = SNameplateRangesData.GetMaxDisplayRange();
+    component = GameInstance.GetTargetingSystem(player.GetGame()).GetComponentClosestToCrosshair(player, angleDistance, searchQuery) as TargetingComponent;
+    if !IsDefined(component) {
+      return "";
+    };
+    return "yaw=" + FloatToStringPrec(angleDistance.Yaw, 2) + " pitch=" + FloatToStringPrec(angleDistance.Pitch, 2);
   }
 }
 
@@ -111,74 +131,46 @@ public class QuickHackIcons extends IScriptable {
     return command.m_cost;
   }
 
-  public final static func Attach(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float) -> Bool {
+  public final static func Slot(command: ref<QuickhackData>, slot: Int32, x: Float, y: Float) -> ref<inkCanvas> {
+    let canvas: ref<inkCanvas>;
     let image: ref<inkImage>;
     let record: wref<UIIcon_Record>;
     let margin: inkMargin;
-    let label: String;
-    let widgetName: CName;
-    let old: wref<inkWidget>;
-    if !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return false;
+    let canvasName: CName;
+    let imageName: CName;
+    if !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return null;
     };
     record = TweakDBInterface.GetUIIconRecord(command.m_icon);
     if !IsDefined(record) {
-      return false;
+      return null;
     };
-    label = "qhicon" + IntToString(slot);
-    widgetName = StringToName(label);
-    old = parent.GetWidget(widgetName);
-    if IsDefined(old) {
-      parent.RemoveChild(old);
-    };
-    image = new inkImage();
-    image.SetName(widgetName);
-    image.SetAnchor(inkEAnchor.TopLeft);
-    image.SetSize(new Vector2(56.00, 56.00));
-    image.SetFitToContent(false);
+    canvas = new inkCanvas();
+    canvasName = StringToName("qhslot" + IntToString(slot));
+    canvas.SetName(canvasName);
+    canvas.SetAnchor(inkEAnchor.TopLeft);
+    canvas.SetSize(new Vector2(56.00, 56.00));
     margin.left = x;
     margin.top = y;
     margin.right = 0.00;
     margin.bottom = 0.00;
-    image.SetMargin(margin);
-    image.Reparent(parent, -1);
+    canvas.SetMargin(margin);
+    canvas.SetVisible(true);
+    image = new inkImage();
+    imageName = StringToName("qhicon" + IntToString(slot));
+    image.SetName(imageName);
+    image.SetAnchor(inkEAnchor.TopLeft);
+    image.SetSize(new Vector2(56.00, 56.00));
+    image.SetFitToContent(false);
     image.SetVisible(true);
+    image.Reparent(canvas, -1);
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
     InkImageUtils.RequestSetImage(null, image, command.m_icon);
-    return true;
+    return canvas;
   }
 }
 
-public class QuickHackAim extends IScriptable {
-  public final static func Dot(player: ref<GameObject>, entity: ref<GameObject>) -> Float {
-    let forward: Vector4;
-    let origin: Vector4;
-    let target: Vector4;
-    let dx: Float;
-    let dy: Float;
-    let fx: Float;
-    let fy: Float;
-    let fLen: Float;
-    let dLen: Float;
-    if !IsDefined(player) || !IsDefined(entity) {
-      return -1.00;
-    };
-    forward = GameInstance.GetCameraSystem(player.GetGame()).GetActiveCameraForward();
-    origin = player.GetWorldPosition();
-    target = entity.GetWorldPosition();
-    dx = target.X - origin.X;
-    dy = target.Y - origin.Y;
-    fx = forward.X;
-    fy = forward.Y;
-    fLen = SqrtF(fx * fx + fy * fy);
-    dLen = SqrtF(dx * dx + dy * dy);
-    if fLen < 0.05 || dLen < 0.25 {
-      return 1.00;
-    };
-    return (fx * dx + fy * dy) / (fLen * dLen);
-  }
-}
 
 
 public class QuickHackCast extends IScriptable {

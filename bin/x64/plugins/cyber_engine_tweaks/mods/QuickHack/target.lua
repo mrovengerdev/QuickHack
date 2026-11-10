@@ -331,7 +331,21 @@ local function asEntityID(value)
   return nil
 end
 
-local crosshairConfirmed = {}
+local conePrinted = false
+
+local function noteCone(player)
+  if conePrinted or not isDefined(player) then
+    return
+  end
+  local ok, text = pcall(function()
+    return QuickHackCrosshair.AngleText(player)
+  end)
+  if ok and type(text) == "string" and text ~= "" then
+    conePrinted = true
+    print("QuickHack: cone " .. text)
+  end
+end
+
 
 local function crosshairAny()
   local player = Game.GetPlayer()
@@ -346,27 +360,6 @@ local function crosshairAny()
   end
   return resolveHackable(entity)
 end
-
-local function lookAtDevice()
-  local player = Game.GetPlayer()
-  if not isDefined(player) then
-    return nil
-  end
-  local ok, entity = pcall(function()
-    return Game.GetTargetingSystem():GetLookAtObject(player, false, false)
-  end)
-  if not ok then
-    return nil
-  end
-  entity = resolveHackable(entity)
-  local kind = kindOf(entity)
-  if kind == "device" or kind == "vehicle" then
-    return entity
-  end
-  return nil
-end
-
-
 
 local function showEntity(entity, fallbackKey)
   local list = fillList(entity)
@@ -383,53 +376,17 @@ local function showEntity(entity, fallbackKey)
 end
 
 function Target.onHoverId(value)
-  local function aim(entity)
-    if kindOf(entity) ~= "device" and kindOf(entity) ~= "vehicle" then
-      return "other"
-    end
-    local player = Game.GetPlayer()
-    local ok, dot = pcall(function()
-      return QuickHackAim.Dot(player, entity)
-    end)
-    if not ok or type(dot) ~= "number" then
-      return "unknown"
-    end
-    if dot < 0 then
-      return "away"
-    end
-    return "look"
-  end
-  if aim(hoveredEntity) ~= "look" and (kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle") then
-    clearAll()
-  end
+  noteCone(Game.GetPlayer())
   local cross = crosshairAny()
   local crossKind = kindOf(cross)
-  if (crossKind == "device" or crossKind == "vehicle") and aim(cross) == "look" then
+  if crossKind == "device" or crossKind == "vehicle" then
     local deviceKey = entityIdKey(cross)
-    crosshairConfirmed[deviceKey] = true
     if deviceKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
       return
     end
     if showEntity(cross, deviceKey) then
       return
     end
-  end
-  local looked = lookAtDevice()
-  if isDefined(looked) and aim(looked) == "look" then
-    local lookedKey = entityIdKey(looked)
-    local crossKey = entityIdKey(cross)
-    local leftConfirmed = crosshairConfirmed[lookedKey] and not isDefined(cross)
-    local movedCrosshair = crossKey ~= nil and crossKey ~= lookedKey
-    if not leftConfirmed and not movedCrosshair then
-      if lookedKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
-        return
-      end
-      if showEntity(looked, lookedKey) then
-        return
-      end
-    end
-  elseif isDefined(looked) then
-    clearAll()
   end
   if kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle" then
     clearAll()

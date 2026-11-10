@@ -118,41 +118,6 @@ local function optionText(command)
   return text
 end
 
-local function iconStrings(command)
-  local path, part = "", ""
-  local okPath, redsPath = pcall(function()
-    return QuickHackIcons.AtlasPathOf(command)
-  end)
-  local okPart, redsPart = pcall(function()
-    return QuickHackIcons.PartNameOf(command)
-  end)
-  if okPath and redsPath ~= nil then
-    path = tostring(redsPath)
-  end
-  if okPart and redsPart ~= nil then
-    part = tostring(redsPart)
-  end
-  return path, part
-end
-
-local function applyAtlas(icon, path, part, size)
-  if path == nil or path == "" or part == nil or part == "" or part == "None" then
-    return false
-  end
-  local ok = pcall(function()
-    icon:SetAtlasResource(path)
-    icon:SetTexturePart(part)
-    icon:SetAtlasResource(ResRef.FromString(path))
-    icon:SetTexturePart(CName.new(part))
-    icon:SetFitToContent(true)
-    icon:SetSize(Vector2.new({ X = size, Y = size }))
-    icon:SetTileHAlign(inkEHorizontalAlign.Center)
-    icon:SetTileVAlign(inkEVerticalAlign.Center)
-    icon:SetTintColor(WHITE)
-    icon:SetOpacity(1.0)
-  end)
-  return ok
-end
 
 local function applyIcon(slot, command)
   if command == nil or command.m_icon == nil or canvas == nil then
@@ -162,16 +127,30 @@ local function applyIcon(slot, command)
   if key == slot.iconKey then
     return
   end
-  local ok, attached = pcall(function()
-    return QuickHackIcons.Attach(canvas, command, slot.index or 1, slot.x + 10, ICON_Y)
+  local ok, slotCanvas = pcall(function()
+    return QuickHackIcons.Slot(command, slot.index or 1, slot.x + 10, ICON_Y)
   end)
-  if ok and attached == true then
-    slot.iconKey = key
-    return
+  if ok and slotCanvas ~= nil then
+    if slot.slotCanvas ~= nil and slot.slotCanvas ~= slotCanvas then
+      pcall(function()
+        slot.slotCanvas:SetVisible(false)
+      end)
+    end
+    local placed = pcall(function()
+      place(slotCanvas, slot.x + 10, ICON_Y, ICON, ICON)
+      slotCanvas:Reparent(canvas, -1)
+      slotCanvas:SetVisible(true)
+    end)
+    if placed then
+      slot.slotCanvas = slotCanvas
+      slot.icon = slotCanvas
+      slot.iconKey = key
+      return
+    end
   end
   if not imageErrorPrinted then
     imageErrorPrinted = true
-    print("QuickHack: icon attach failed")
+    print("QuickHack: icon slot failed")
   end
 end
 
@@ -279,6 +258,12 @@ local function hideSlot(slot)
       slot.spawned:SetVisible(false)
     end)
     slot.spawned = nil
+  end
+  if slot.slotCanvas ~= nil then
+    pcall(function()
+      slot.slotCanvas:SetVisible(false)
+    end)
+    slot.slotCanvas = nil
   end
   slot.icon = slot.placeholder
   slot.iconKey = nil
