@@ -398,6 +398,56 @@ function Target.install()
     print("QuickHack: nameplate hook failed: " .. err)
   end
 end
+local rayMissing = false
+
+local function isObject(entity)
+  local kind = kindOf(entity)
+  return kind == "device" or kind == "vehicle"
+end
+
+local function facingAllows(entity)
+  local player = Game.GetPlayer()
+  local ok, dot = pcall(function()
+    return QuickHackAim.Facing(player, entity)
+  end)
+  if not ok or type(dot) ~= "number" or dot <= -1.5 then
+    if not rayMissing then
+      rayMissing = true
+      print("QuickHack: crosshair ray missing")
+    end
+    return true
+  end
+  return dot >= 0
+end
+
+local function tryShowObject(entity)
+  entity = resolveHackable(entity)
+  if not isObject(entity) or not accept(entity) or not facingAllows(entity) then
+    return false
+  end
+  local key = entityIdKey(entity)
+  if key == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
+    return true
+  end
+  return showEntity(entity, key)
+end
+
+local function objectFromQueries()
+  local player = Game.GetPlayer()
+  if not isDefined(player) then
+    return false
+  end
+  local okLook, looked = pcall(function()
+    return QuickHackAim.LookAt(player)
+  end)
+  if okLook and tryShowObject(looked) then
+    return true
+  end
+  local okCross, cross = pcall(function()
+    return QuickHackAim.Crosshair(player)
+  end)
+  return okCross and tryShowObject(cross)
+end
 
 function Target.tick(dt)
   local now = os.clock()
@@ -451,8 +501,16 @@ function Target.tick(dt)
     end
     return nil
   end)
+  local lookEntity = nil
   if hoverOk then
+    lookEntity = resolveHackable(findEntity(asEntityID(hoverValue)))
+  end
+  if kindOf(lookEntity) == "puppet" and accept(lookEntity) then
     Target.onHoverId(hoverValue)
+  elseif tryShowObject(lookEntity) then
+  elseif objectFromQueries() then
+  elseif hoverOk then
+    Target.onHoverId(nil)
   end
 
   if hidden() then
