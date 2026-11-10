@@ -332,7 +332,24 @@ local function asEntityID(value)
 end
 
 
-local crosshairConfirmed = {}
+local offConePrinted = false
+
+local function noteOffCone()
+  if offConePrinted then
+    return
+  end
+  local player = Game.GetPlayer()
+  if not isDefined(player) then
+    return
+  end
+  local ok, text = pcall(function()
+    return QuickHackCrosshair.AngleText(player)
+  end)
+  if ok and type(text) == "string" and text ~= "" then
+    offConePrinted = true
+    print("QuickHack: object off-cone " .. text)
+  end
+end
 
 local function crosshairAny()
   local player = Game.GetPlayer()
@@ -346,25 +363,6 @@ local function crosshairAny()
     return nil
   end
   return resolveHackable(entity)
-end
-
-local function lookAtDevice()
-  local player = Game.GetPlayer()
-  if not isDefined(player) then
-    return nil
-  end
-  local ok, entity = pcall(function()
-    return Game.GetTargetingSystem():GetLookAtObject(player, false, false)
-  end)
-  if not ok then
-    return nil
-  end
-  entity = resolveHackable(entity)
-  local kind = kindOf(entity)
-  if kind == "device" or kind == "vehicle" then
-    return entity
-  end
-  return nil
 end
 
 local function showEntity(entity, fallbackKey)
@@ -386,28 +384,15 @@ function Target.onHoverId(value)
   local crossKind = kindOf(cross)
   if crossKind == "device" or crossKind == "vehicle" then
     local deviceKey = entityIdKey(cross)
-    crosshairConfirmed[deviceKey] = true
     if deviceKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
       return
     end
     if showEntity(cross, deviceKey) then
       return
     end
-  end
-  local looked = lookAtDevice()
-  if isDefined(looked) then
-    local lookedKey = entityIdKey(looked)
-    local crossKey = entityIdKey(cross)
-    local leftConfirmed = crosshairConfirmed[lookedKey] and not isDefined(cross)
-    local movedCrosshair = crossKey ~= nil and crossKey ~= lookedKey
-    if not leftConfirmed and not movedCrosshair then
-      if lookedKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
-        return
-      end
-      if showEntity(looked, lookedKey) then
-        return
-      end
-    end
+  elseif kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle" then
+    noteOffCone()
+    clearAll()
   end
   if kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle" then
     clearAll()

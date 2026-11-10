@@ -58,7 +58,27 @@ public class QuickHackCrosshair extends IScriptable {
     if !IsDefined(component) {
       return null;
     };
+    if AbsF(angleDistance.Yaw) > 12.00 || AbsF(angleDistance.Pitch) > 12.00 {
+      return null;
+    };
     return component.GetEntity() as GameObject;
+  }
+
+  public final static func AngleText(player: ref<GameObject>) -> String {
+    let angleDistance: EulerAngles;
+    let component: wref<TargetingComponent>;
+    let searchQuery: TargetSearchQuery;
+    if !IsDefined(player) {
+      return "";
+    };
+    TargetSearchQuery.SetComponentFilter(searchQuery, TargetComponentFilterType.QuickHack);
+    searchQuery.searchFilter = TSF_Quickhackable();
+    searchQuery.maxDistance = SNameplateRangesData.GetMaxDisplayRange();
+    component = GameInstance.GetTargetingSystem(player.GetGame()).GetComponentClosestToCrosshair(player, angleDistance, searchQuery) as TargetingComponent;
+    if !IsDefined(component) {
+      return "";
+    };
+    return "yaw=" + FloatToStringPrec(angleDistance.Yaw, 2) + " pitch=" + FloatToStringPrec(angleDistance.Pitch, 2);
   }
 }
 
