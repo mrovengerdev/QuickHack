@@ -163,15 +163,39 @@ local function applyIcon(slot, command)
   if key == slot.iconKey then
     return
   end
+  local made = false
+  local okMake, image = pcall(function()
+    return QuickHackIcons.Make(command)
+  end)
+  if okMake and image ~= nil then
+    local okParent = pcall(function()
+      place(image, slot.x + 10, ICON_Y, ICON, ICON)
+      image:Reparent(canvas, -1)
+      image:SetVisible(true)
+    end)
+    if okParent then
+      if slot.spawned ~= nil and slot.spawned ~= image then
+        pcall(function()
+          slot.spawned:SetVisible(false)
+        end)
+      end
+      slot.spawned = image
+      slot.icon = image
+      made = true
+    end
+  end
   local path, part = iconStrings(command)
-  if not applyAtlas(icon, path, part, ICON) then
+  if applyAtlas(icon, path, part, ICON) then
+    icon:SetVisible(true)
+    made = true
+  end
+  if not made then
     if not imageErrorPrinted then
       imageErrorPrinted = true
-      print("QuickHack: icon atlas failed " .. path .. " " .. part)
+      print("QuickHack: icon atlas failed " .. tostring(path) .. " " .. tostring(part))
     end
     return
   end
-  slot.icon = icon
   slot.iconKey = key
 end
 
@@ -248,14 +272,25 @@ local function paintRam(slot, command)
   local unaffordable = available ~= nil and cost > available
   slot.ramText:SetTintColor(unaffordable and RED or NUMBER_TINT)
   slot.ramText:SetVisible(true)
+  if slot.frame ~= nil then
+    slot.frame:SetTintColor(unaffordable and RED or NUMBER_TINT)
+    slot.frame:SetOpacity(unaffordable and 0.9 or 0.4)
+    slot.frame:SetVisible(true)
+  end
 end
 
 local function hideSlot(slot)
+  if slot.frame ~= nil then
+    slot.frame:SetVisible(false)
+  end
   if slot.placeholder ~= nil then
     slot.placeholder:SetVisible(false)
   end
   if slot.icon ~= nil then
     slot.icon:SetVisible(false)
+  end
+  if slot.spawned ~= nil then
+    slot.spawned:SetVisible(false)
   end
   if slot.number ~= nil then
     slot.number:SetVisible(false)
@@ -278,6 +313,9 @@ local function showSlot(slot, command)
   slot.number:SetVisible(true)
   slot.title:SetVisible(true)
   slot.title:SetText(optionText(command))
+  if slot.frame ~= nil then
+    slot.frame:SetVisible(true)
+  end
   applyIcon(slot, command)
   slot.placeholder:SetOpacity(opacity)
   slot.placeholder:SetVisible(true)
@@ -312,6 +350,14 @@ local function build()
   local i = 1
   while i <= SLOT_COUNT do
     local x = (i - 1) * STRIDE
+    local frame = inkRectangle.new()
+    frame:SetAnchor(inkEAnchor.TopLeft)
+    place(frame, x + 8, ICON_Y - 2, ICON + 4, ICON + 4)
+    frame:SetTintColor(NUMBER_TINT)
+    frame:SetOpacity(0.45)
+    frame:SetVisible(false)
+    frame:Reparent(canvas, -1)
+
     local icon = inkImage.new()
     icon:SetAnchor(inkEAnchor.TopLeft)
     place(icon, x + 10, ICON_Y, ICON, ICON)
@@ -324,6 +370,7 @@ local function build()
     slots[i] = {
       placeholder = icon,
       icon = icon,
+      frame = frame,
       number = number,
       title = title,
       ramText = ramText,

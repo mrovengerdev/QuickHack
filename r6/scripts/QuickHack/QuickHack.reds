@@ -110,8 +110,55 @@ public class QuickHackIcons extends IScriptable {
     };
     return command.m_cost;
   }
+
+  public final static func Make(command: ref<QuickhackData>) -> ref<inkImage> {
+    let image: ref<inkImage>;
+    let record: wref<UIIcon_Record>;
+    if !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return null;
+    };
+    record = TweakDBInterface.GetUIIconRecord(command.m_icon);
+    if !IsDefined(record) {
+      return null;
+    };
+    image = new inkImage();
+    image.SetName(n"quickhack_icon");
+    image.SetAnchor(inkEAnchor.TopLeft);
+    image.SetSize(new Vector2(56.00, 56.00));
+    image.SetFitToContent(false);
+    image.SetVisible(true);
+    image.SetAtlasResource(record.AtlasResourcePath());
+    image.SetTexturePart(record.AtlasPartName());
+    InkImageUtils.RequestSetImage(null, image, command.m_icon);
+    return image;
+  }
 }
 
+public class QuickHackAim extends IScriptable {
+  public final static func Dot(player: ref<GameObject>, entity: ref<GameObject>) -> Float {
+    let forward: Vector4;
+    let origin: Vector4;
+    let target: Vector4;
+    let dx: Float;
+    let dy: Float;
+    let dz: Float;
+    let len: Float;
+    if !IsDefined(player) || !IsDefined(entity) {
+      return 1.00;
+    };
+    forward = GameInstance.GetCameraSystem(player.GetGame()).GetActiveCameraForward();
+    origin = player.GetWorldPosition();
+    target = entity.GetWorldPosition();
+    dx = target.X - origin.X;
+    dy = target.Y - origin.Y;
+    dz = target.Z - origin.Z;
+    len = SqrtF(dx * dx + dy * dy + dz * dz);
+    if len < 0.05 {
+      return 1.00;
+    };
+    return (forward.X * dx + forward.Y * dy + forward.Z * dz) / len;
+  }
+}
 
 
 public class QuickHackCast extends IScriptable {
