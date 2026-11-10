@@ -111,26 +111,42 @@ public class QuickHackIcons extends IScriptable {
     return command.m_cost;
   }
 
-  public final static func Make(command: ref<QuickhackData>) -> ref<inkImage> {
+  public final static func Attach(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float) -> Bool {
     let image: ref<inkImage>;
     let record: wref<UIIcon_Record>;
-    if !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return null;
+    let margin: inkMargin;
+    let label: String;
+    let widgetName: CName;
+    let old: wref<inkWidget>;
+    if !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return false;
     };
     record = TweakDBInterface.GetUIIconRecord(command.m_icon);
     if !IsDefined(record) {
-      return null;
+      return false;
+    };
+    label = "qhicon" + IntToString(slot);
+    widgetName = StringToName(label);
+    old = parent.GetWidget(widgetName);
+    if IsDefined(old) {
+      parent.RemoveChild(old);
     };
     image = new inkImage();
-    image.SetName(n"quickhack_icon");
+    image.SetName(widgetName);
     image.SetAnchor(inkEAnchor.TopLeft);
     image.SetSize(new Vector2(56.00, 56.00));
     image.SetFitToContent(false);
+    margin.left = x;
+    margin.top = y;
+    margin.right = 0.00;
+    margin.bottom = 0.00;
+    image.SetMargin(margin);
+    image.Reparent(parent, -1);
     image.SetVisible(true);
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
     InkImageUtils.RequestSetImage(null, image, command.m_icon);
-    return image;
+    return true;
   }
 }
 

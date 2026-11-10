@@ -155,46 +155,23 @@ local function applyAtlas(icon, path, part, size)
 end
 
 local function applyIcon(slot, command)
-  local icon = slot.placeholder
-  if command == nil or icon == nil or command.m_icon == nil then
+  if command == nil or command.m_icon == nil or canvas == nil then
     return
   end
   local key = tostring(command.m_icon)
   if key == slot.iconKey then
     return
   end
-  local made = false
-  local okMake, image = pcall(function()
-    return QuickHackIcons.Make(command)
+  local ok, attached = pcall(function()
+    return QuickHackIcons.Attach(canvas, command, slot.index or 1, slot.x + 10, ICON_Y)
   end)
-  if okMake and image ~= nil then
-    local okParent = pcall(function()
-      place(image, slot.x + 10, ICON_Y, ICON, ICON)
-      image:Reparent(canvas, -1)
-      image:SetVisible(true)
-    end)
-    if okParent then
-      if slot.spawned ~= nil and slot.spawned ~= image then
-        pcall(function()
-          slot.spawned:SetVisible(false)
-        end)
-      end
-      slot.spawned = image
-      slot.icon = image
-      slot.iconKey = key
-      return
-    end
-  end
-  local path, part = iconStrings(command)
-  if applyAtlas(icon, path, part, ICON) then
-    icon:SetVisible(true)
-    slot.icon = icon
+  if ok and attached == true then
     slot.iconKey = key
     return
   end
   if not imageErrorPrinted then
     imageErrorPrinted = true
-    print("QuickHack: icon atlas failed " .. tostring(path) .. " " .. tostring(part))
+    print("QuickHack: icon attach failed")
   end
 end
 
@@ -412,6 +389,7 @@ local function build()
       title = title,
       ramText = ramText,
       iconKey = nil,
+      index = i,
       x = x,
     }
     i = i + 1
