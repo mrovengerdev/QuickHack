@@ -394,7 +394,7 @@ function Target.onHoverId(value)
     if not ok or type(dot) ~= "number" then
       return false
     end
-    return dot < 0.20
+    return dot < 0
   end
   if behind(hoveredEntity) then
     clearAll()

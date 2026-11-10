@@ -181,22 +181,21 @@ local function applyIcon(slot, command)
       end
       slot.spawned = image
       slot.icon = image
-      made = true
+      slot.iconKey = key
+      return
     end
   end
   local path, part = iconStrings(command)
   if applyAtlas(icon, path, part, ICON) then
     icon:SetVisible(true)
-    made = true
-  end
-  if not made then
-    if not imageErrorPrinted then
-      imageErrorPrinted = true
-      print("QuickHack: icon atlas failed " .. tostring(path) .. " " .. tostring(part))
-    end
+    slot.icon = icon
+    slot.iconKey = key
     return
   end
-  slot.iconKey = key
+  if not imageErrorPrinted then
+    imageErrorPrinted = true
+    print("QuickHack: icon atlas failed " .. tostring(path) .. " " .. tostring(part))
+  end
 end
 
 local function availableRam()
@@ -290,8 +289,13 @@ local function hideSlot(slot)
     slot.icon:SetVisible(false)
   end
   if slot.spawned ~= nil then
-    slot.spawned:SetVisible(false)
+    pcall(function()
+      slot.spawned:SetVisible(false)
+    end)
+    slot.spawned = nil
   end
+  slot.icon = slot.placeholder
+  slot.iconKey = nil
   if slot.number ~= nil then
     slot.number:SetVisible(false)
   end
