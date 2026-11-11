@@ -473,6 +473,25 @@ public class QuickHackIcons extends IScriptable {
     return true;
   }
 
+  public final static func TintIcon(widget: wref<inkWidget>, red: Bool) -> Bool {
+    let image: wref<inkImage>;
+    let path: CName;
+    if !IsDefined(widget) {
+      return false;
+    };
+    path = n"MainColors.Blue";
+    if red {
+      path = n"MainColors.Red";
+    };
+    image = QuickHackIcons.FindImage(widget);
+    if !IsDefined(image) {
+      return false;
+    };
+    image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
+    image.BindProperty(n"tintColor", path);
+    return true;
+  }
+
   public final static func FindImage(widget: wref<inkWidget>) -> wref<inkImage> {
     let image: wref<inkImage>;
     let compound: wref<inkCompoundWidget>;

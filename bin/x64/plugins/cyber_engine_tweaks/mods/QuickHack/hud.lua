@@ -402,6 +402,7 @@ local function readCost(command)
 end
 
 local tintPrinted = false
+local iconTintPrinted = false
 
 local function gameTint(widget, unaffordable)
   if widget == nil then
@@ -438,7 +439,19 @@ local function paintRam(slot, command)
   gameTint(slot.ramText, unaffordable)
   slot.ramText:SetVisible(true)
   if slot.icon ~= nil and slot.iconKey ~= nil then
-    gameTint(slot.icon, unaffordable)
+    local okTint, tinted = pcall(function()
+      return QuickHackIcons.TintIcon(slot.icon, unaffordable)
+    end)
+    if not okTint or tinted ~= true then
+      if not iconTintPrinted then
+        iconTintPrinted = true
+        print("QuickHack: icon tint failed " .. tostring(tinted))
+      end
+      gameTint(slot.icon, unaffordable)
+    elseif not iconTintPrinted then
+      iconTintPrinted = true
+      print("QuickHack: icon tinted with game colors")
+    end
   end
   if slot.edges ~= nil then
     local edge = 1
