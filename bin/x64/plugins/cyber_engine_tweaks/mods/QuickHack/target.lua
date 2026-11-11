@@ -339,13 +339,35 @@ local function lookAtObject()
   if not isDefined(player) then
     return nil
   end
-  local ok, entity = pcall(function()
-    return QuickHackAim.LookAt(player)
-  end)
-  if not ok or not isDefined(entity) then
+  local function fromLook(entity)
+    if isDefined(entity) then
+      return resolveHackable(entity)
+    end
     return nil
   end
-  return resolveHackable(entity)
+  local okSys, targeting = pcall(function()
+    return Game.GetTargetingSystem()
+  end)
+  if okSys and targeting ~= nil then
+    local okVis, visible = pcall(function()
+      return targeting:GetLookAtObject(player, true, true)
+    end)
+    local found = fromLook(okVis and visible or nil)
+    if found ~= nil then
+      return found
+    end
+    local okAny, any = pcall(function()
+      return targeting:GetLookAtObject(player, true, false)
+    end)
+    found = fromLook(okAny and any or nil)
+    if found ~= nil then
+      return found
+    end
+  end
+  local okWrap, wrapped = pcall(function()
+    return QuickHackAim.LookAt(player)
+  end)
+  return fromLook(okWrap and wrapped or nil)
 end
 
 local function closestObject()
@@ -370,19 +392,28 @@ end
 
 local function hoveredNow()
   local looked = lookAtObject()
-  local cross, angle = closestObject()
-  local lookKey = entityIdKey(looked)
-  local crossKey = entityIdKey(cross)
-  if lookKey ~= nil and lookKey == crossKey then
+  if isDefined(looked) then
     return looked
   end
-  if isDefined(cross) and angle <= HOVER_DEG then
+  local cross, angle = closestObject()
+  if isDefined(cross) and type(angle) == "number" and angle <= HOVER_DEG then
     return cross
   end
-  if isDefined(looked) and not isDefined(cross) then
-    return looked
-  end
   return nil
+end
+
+local function showEntity(entity, fallbackKey)
+  local list = fillList(entity)
+  if list == nil then
+    return false
+  end
+  hoveredKey = entityIdKey(entity) or fallbackKey
+  hoveredEntity = entity
+  targetId = hoveredKey
+  commands = list
+  generation = generation + 1
+  nextFillAt = os.clock() + 0.25
+  return true
 end
 
 local function acquire(entity)
@@ -450,7 +481,18 @@ function Target.tick(dt)
     return
   end
 
-  if not acquire(hoveredNow()) then
+  local ok, armed = pcall(function()
+    return acquire(hoveredNow())
+  end)
+  if not ok then
+    local msg = tostring(armed)
+    if not seenFillErrors[msg] then
+      seenFillErrors[msg] = true
+      print("QuickHack: acquire failed: " .. msg)
+    end
+    return
+  end
+  if not armed then
     return
   end
   if now >= nextFillAt then
