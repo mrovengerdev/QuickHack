@@ -5,7 +5,7 @@ local LINE_H = 22
 local LEFT = 36
 local TOP = 150
 local WIDTH = 640
-local CHUNK_SECONDS = 1.20
+local HACK_FALLBACK = 0.50
 local SCROLL_PX_PER_SEC = 46
 local CFG = "bin/x64/plugins/cyber_engine_tweaks/mods/QuickHack/stream.cfg"
 
@@ -121,7 +121,6 @@ end
 local function pingLines(count)
   local ip = randomIp()
   local lines = {
-    "> exec quickhack",
     "> ping " .. ip,
     "PING " .. ip .. " (" .. ip .. "): 56 data bytes",
   }
@@ -132,45 +131,40 @@ local function pingLines(count)
     i = i + 1
   end
   lines[#lines + 1] = "> nslookup " .. ip
-  lines[#lines + 1] = "mem[" .. addr() .. "] = A"
   lines[#lines + 1] = "Name:    subnet-node"
   lines[#lines + 1] = "Address: " .. ip
-  lines[#lines + 1] = "CONNECTION ACCEPTED"
-  lines[#lines + 1] = "HTTP/1.1 200 OK"
   lines[#lines + 1] = string.format("--- %d packets transmitted, %d received, 0%% packet loss", count, count)
   return lines
 end
 
 local function overheatLines(title, target)
   return {
-    "> exec quickhack",
     "> ddos --target " .. target .. " --vector heat",
-    "socket[" .. addr() .. "] = SYN",
-    "mem[" .. addr() .. "] ^= 0xA35C91D2",
+    "opening 4096 sockets",
     "syn flood ................ ok",
-    "tbl[" .. addr() .. "] overflow",
-    "CONNECTION ACCEPTED",
-    "HTTP/1.1 200 OK",
-    "gov[" .. addr() .. "] bypass",
+    "connection table overflow",
+    "thermal governor bypassed",
     "core temp 41C -> 118C",
-    "pid[" .. addr() .. "] coolant_loop killed",
+    "coolant_loop killed",
     "> " .. title .. " committed",
   }
 end
 
-local function genericLines(title)
-  local ip = randomIp()
-  return {
-    "> exec quickhack",
-    "POST /daemon/" .. title .. " HTTP/1.1",
-    "Host: " .. ip,
-    "mem[" .. addr() .. "] = " .. addr(),
-    "xor " .. addr() .. " " .. addr(),
-    "jmp " .. addr(),
-    "CONNECTION ACCEPTED",
-    "HTTP/1.1 200 OK",
-    "> commit " .. title,
+local function handshakeLines(title)
+  local lines = {
+    "> exec " .. title,
+    "open session",
+    "inject " .. title,
   }
+  local i = 1
+  while i <= 6 do
+    lines[#lines + 1] = addr() .. " x " .. addr()
+    i = i + 1
+  end
+  lines[#lines + 1] = "handshake ................ ok"
+  lines[#lines + 1] = "write payload"
+  lines[#lines + 1] = "> " .. title .. " committed"
+  return lines
 end
 
 local function scriptFor(command)
@@ -187,7 +181,19 @@ local function scriptFor(command)
   if string.find(action, "overheat", 1, true) or string.find(folded, "overheat", 1, true) then
     return overheatLines(title, target)
   end
-  return genericLines(title)
+  return handshakeLines(title)
+end
+
+local function hackSeconds(command)
+  if command ~= nil and command.m_action ~= nil then
+    local ok, time = pcall(function()
+      return command.m_action:GetActivationTime()
+    end)
+    if ok and type(time) == "number" and time >= 0.15 and time <= 8 then
+      return time
+    end
+  end
+  return HACK_FALLBACK
 end
 
 local function ensure()
@@ -239,7 +245,7 @@ end
 
 local queue = {}
 
-local function scriptRate(lines)
+local function measure(lines)
   local total = 0
   local i = 1
   while i <= #lines do
@@ -249,7 +255,15 @@ local function scriptRate(lines)
   if total < 1 then
     total = 1
   end
-  return total / CHUNK_SECONDS
+  return total
+end
+
+local function departJobs()
+  local i = 1
+  while i <= #jobs do
+    jobs[i].depart = true
+    i = i + 1
+  end
 end
 
 function Stream.push(command)
@@ -257,11 +271,16 @@ function Stream.push(command)
     return
   end
   local lines = scriptFor(command)
-  if active == nil then
-    active = { lines = lines, index = 1, rate = scriptRate(lines) }
-    return
-  end
-  queue[#queue + 1] = lines
+  local seconds = hackSeconds(command)
+  departJobs()
+  queue = {}
+  active = {
+    lines = lines,
+    index = 1,
+    rate = measure(lines) / seconds,
+    speed = ((#lines + LINES) * LINE_H) / seconds,
+    deadline = os.clock() + seconds,
+  }
 end
 
 local function placeRows()
@@ -312,9 +331,19 @@ function Stream.tick(dt)
   if dt > 0.05 then
     dt = 0.05
   end
+  if active ~= nil and os.clock() >= active.deadline then
+    departJobs()
+    active = nil
+  end
   if active == nil and #queue > 0 then
     local lines = table.remove(queue, 1)
-    active = { lines = lines, index = 1, rate = scriptRate(lines) }
+    active = {
+      lines = lines,
+      index = 1,
+      rate = measure(lines) / HACK_FALLBACK,
+      speed = ((#lines + LINES) * LINE_H) / HACK_FALLBACK,
+      deadline = os.clock() + HACK_FALLBACK,
+    }
   end
   local step = 1
   if active ~= nil and active.rate ~= nil then
@@ -326,7 +355,7 @@ function Stream.tick(dt)
   if active ~= nil then
     local line = active.lines[active.index]
     local current = jobs[#jobs]
-    if current == nil or current.text ~= line then
+    if current == nil or current.text ~= line or current.depart == true then
       pushLine(line)
       current = jobs[#jobs]
     end
@@ -335,14 +364,18 @@ function Stream.tick(dt)
       current.shown = #line
       active.index = active.index + 1
       if active.index > #active.lines then
+        departJobs()
         active = nil
       end
     end
   end
   local i = 1
   while i <= #jobs do
-    if active == nil or jobs[i] ~= jobs[#jobs] or jobs[i].shown >= #jobs[i].text then
-      jobs[i].y = jobs[i].y - SCROLL_PX_PER_SEC * dt
+    local job = jobs[i]
+    if job.depart == true then
+      job.y = job.y - ((LINES * LINE_H) / 0.08) * dt
+    elseif active ~= nil and job ~= jobs[#jobs] then
+      job.y = job.y - active.speed * dt
     end
     i = i + 1
   end
@@ -367,42 +400,34 @@ function Stream.drawSettings()
     end
     return value, false
   end
-  ImGui.SetNextWindowSize(360, 180, ImGuiCond.FirstUseEver)
-  ImGui.Begin("QuickHack stream", ImGuiWindowFlags.AlwaysAutoResize)
+  local flags = ImGuiWindowFlags.AlwaysAutoResize
+  if ImGuiWindowFlags.NoMove ~= nil then
+    flags = flags + ImGuiWindowFlags.NoMove
+  end
+  ImGui.Begin("QuickHack stream", flags)
   ImGui.Text("Left-side code color and opacity")
   local changed = false
-  local nr, rOk = slider("Red", color.r, 0.0, 1.5)
-  if rOk then
-    color.r = nr
+  local function clicked(label)
+    local pressed, extra = ImGui.Button(label, 88, 28)
+    return pressed == true or extra == true
+  end
+  if clicked("Red") then
+    color.r, color.g, color.b = 1, 0, 0
     changed = true
   end
-  local ng, gOk = slider("Green", color.g, 0.0, 1.5)
-  if gOk then
-    color.g = ng
+  ImGui.SameLine()
+  if clicked("Green") then
+    color.r, color.g, color.b = 0, 1, 0
     changed = true
   end
-  local nb, bOk = slider("Blue", color.b, 0.0, 1.5)
-  if bOk then
-    color.b = nb
+  ImGui.SameLine()
+  if clicked("Blue") then
+    color.r, color.g, color.b = 0, 0, 1
     changed = true
   end
   local na, aOk = slider("Opacity", opacity, 0.15, 1.0)
   if aOk then
     opacity = na
-    changed = true
-  end
-  if ImGui.Button("Red") then
-    color.r, color.g, color.b = 1.0, 0.16, 0.16
-    changed = true
-  end
-  ImGui.SameLine()
-  if ImGui.Button("Blue") then
-    color.r, color.g, color.b = 0.22, 0.48, 1.0
-    changed = true
-  end
-  ImGui.SameLine()
-  if ImGui.Button("Green") then
-    color.r, color.g, color.b = 0.20, 1.0, 0.32
     changed = true
   end
   if changed then
