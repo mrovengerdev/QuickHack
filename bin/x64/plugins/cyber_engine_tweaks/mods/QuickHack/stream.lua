@@ -5,8 +5,9 @@ local LINE_H = 22
 local LEFT = 36
 local TOP = 150
 local WIDTH = 640
-local HACK_SECONDS = 1.00
-local SCROLL_PX_PER_SEC = 46
+local CHARS_PER_SEC = 92
+local SCROLL_PX_PER_SEC = 18
+local DONE_SCROLL_PX_PER_SEC = 46
 local CFG = "bin/x64/plugins/cyber_engine_tweaks/mods/QuickHack/stream.cfg"
 
 local color = { r = 0.3686, g = 0.9647, b = 1.1888 }
@@ -193,9 +194,7 @@ local function scriptFor(command)
   return handshakeLines(title)
 end
 
-local function hackSeconds()
-  return HACK_SECONDS
-end
+
 
 local function ensure()
   if canvas ~= nil then
@@ -246,19 +245,6 @@ end
 
 local queue = {}
 
-local function measure(lines)
-  local total = 0
-  local i = 1
-  while i <= #lines do
-    total = total + #lines[i]
-    i = i + 1
-  end
-  if total < 1 then
-    total = 1
-  end
-  return total
-end
-
 local function departJobs()
   local i = 1
   while i <= #jobs do
@@ -273,11 +259,7 @@ function Stream.push(command)
   end
   local lines = scriptFor(command)
   departJobs()
-  active = {
-    lines = lines,
-    index = 1,
-    rate = measure(lines) / hackSeconds(),
-  }
+  active = { lines = lines, index = 1 }
 end
 
 local function placeRows()
@@ -328,12 +310,9 @@ function Stream.tick(dt)
   if dt > 0.05 then
     dt = 0.05
   end
-  local step = 1
-  if active ~= nil and active.rate ~= nil then
-    step = math.floor(active.rate * dt)
-    if step < 1 then
-      step = 1
-    end
+  local step = math.floor(CHARS_PER_SEC * dt)
+  if step < 1 then
+    step = 1
   end
   if active ~= nil then
     local line = active.lines[active.index]
@@ -354,8 +333,13 @@ function Stream.tick(dt)
   local i = 1
   while i <= #jobs do
     local job = jobs[i]
-    if job.depart == true then
-      job.y = job.y - SCROLL_PX_PER_SEC * dt
+    local typing = active ~= nil and job == jobs[#jobs] and job.depart ~= true and job.shown < #job.text
+    if not typing then
+      local speed = SCROLL_PX_PER_SEC
+      if active == nil or job.depart == true then
+        speed = DONE_SCROLL_PX_PER_SEC
+      end
+      job.y = job.y - speed * dt
     end
     i = i + 1
   end
