@@ -13,6 +13,7 @@ local SLOT_W = 76
 local STRIDE = 84
 local BAR_W = 748
 local BAR_H = 114
+local FILL_OPACITY = 0.15
 local NUMBER_TINT = nil
 local WHITE = nil
 local RED = nil
@@ -440,6 +441,11 @@ local function paintRam(slot, command)
   gameTint(slot.ramText, unaffordable)
   gameTint(slot.number, unaffordable)
   gameTint(slot.title, unaffordable)
+  if slot.fill ~= nil then
+    gameTint(slot.fill, unaffordable)
+    slot.fill:SetOpacity(FILL_OPACITY)
+    slot.fill:SetVisible(true)
+  end
   slot.ramText:SetVisible(true)
   if slot.icon ~= nil and slot.iconKey ~= nil then
     local okTint, tinted = pcall(function()
@@ -468,6 +474,9 @@ local function paintRam(slot, command)
 end
 
 local function hideSlot(slot)
+  if slot.fill ~= nil then
+    slot.fill:SetVisible(false)
+  end
   if slot.edges ~= nil then
     local edge = 1
     while slot.edges[edge] ~= nil do
@@ -629,6 +638,13 @@ local function build()
     local frameY = ICON_Y - 2
     local frameW = ICON + 4
     local frameH = ICON + 4
+    local fill = inkRectangle.new()
+    fill:SetAnchor(inkEAnchor.TopLeft)
+    place(fill, frameX, frameY, frameW, frameH)
+    fill:SetTintColor(NUMBER_TINT)
+    fill:SetOpacity(FILL_OPACITY)
+    fill:SetVisible(false)
+    fill:Reparent(canvas, -1)
     local edge = 1
     while edge <= 4 do
       local bar = inkRectangle.new()
@@ -680,6 +696,7 @@ local function build()
       placeholder = icon,
       icon = icon,
       edges = edges,
+      fill = fill,
       number = number,
       title = title,
       ramText = ramText,
