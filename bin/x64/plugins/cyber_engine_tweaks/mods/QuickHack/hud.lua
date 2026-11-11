@@ -32,6 +32,7 @@ local inkController = nil
 local inkHost = nil
 local hosted = false
 local hostPrinted = false
+local hostRetry = false
 
 local function screenX(widget)
   local ok, pos = pcall(function()
@@ -581,22 +582,9 @@ local function adoptHost()
 end
 
 function Hud.install()
-  pcall(function()
-    ObserveAfter("gameuiRootHudGameController", "OnInitialize", function(this)
-      rememberHud(this, true)
-      adoptHost()
-    end)
-  end)
-  pcall(function()
-    ObserveAfter("healthbarWidgetGameController", "OnInitialize", function(this)
-      rememberHud(this, false)
-    end)
-  end)
-  pcall(function()
-    ObserveAfter("gameuiHudHealthbarGameController", "OnInitialize", function(this)
-      rememberHud(this, false)
-    end)
-  end)
+  -- Do not Observe OnInitialize on HUD subclasses: CET errors with
+  -- "Function OnInitialize in class ... does not exist" because the
+  -- method is defined on a parent. bindHud() polls the live controller.
 end
 
 function Hud.invalidate()
@@ -624,7 +612,8 @@ function Hud.ensure()
       Hud.invalidate()
     end
   end
-  if built and not hosted and inkController ~= nil then
+  if built and not hosted and inkController ~= nil and not hostRetry then
+    hostRetry = true
     Hud.invalidate()
   end
   if built then

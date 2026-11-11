@@ -28,7 +28,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 45")
+  print("QuickHack ready build 46")
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -39,6 +39,8 @@ registerForEvent("onOverlayClose", function()
   Cast.setOverlay(false)
 end)
 
+local updateErrorPrinted = false
+
 registerForEvent("onUpdate", function(dt)
   local player = Game.GetPlayer()
   if player == nil or not IsDefined(player) then
@@ -46,11 +48,28 @@ registerForEvent("onUpdate", function(dt)
     Stream.invalidate()
     return
   end
-  Hud.ensure()
-  Target.tick(dt)
-  Cast.tickDilation()
-  Hud.refresh()
-  Stream.tick(dt)
+  local function run(name, fn)
+    local ok, err = pcall(fn)
+    if not ok and not updateErrorPrinted then
+      updateErrorPrinted = true
+      print("QuickHack: " .. name .. " failed: " .. tostring(err))
+    end
+  end
+  run("hud ensure", function()
+    Hud.ensure()
+  end)
+  run("target", function()
+    Target.tick(dt)
+  end)
+  run("dilation", function()
+    Cast.tickDilation()
+  end)
+  run("hud refresh", function()
+    Hud.refresh()
+  end)
+  run("stream", function()
+    Stream.tick(dt)
+  end)
 end)
 
 

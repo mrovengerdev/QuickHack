@@ -1665,11 +1665,20 @@ end
 
 local queue = {}
 
+local scriptErrorPrinted = false
+
 function Stream.push(command)
   if command == nil then
     return
   end
-  local lines = scriptFor(command)
+  local ok, lines = pcall(scriptFor, command)
+  if not ok or type(lines) ~= "table" or #lines < 1 then
+    if not scriptErrorPrinted then
+      scriptErrorPrinted = true
+      print("QuickHack: stream script failed: " .. tostring(lines))
+    end
+    return
+  end
   if active == nil then
     active = { lines = lines, index = 1 }
     return
@@ -1733,6 +1742,9 @@ function Stream.tick(dt)
   end
   if active ~= nil then
     local line = active.lines[active.index]
+    if type(line) ~= "string" then
+      active = nil
+    else
     local current = jobs[#jobs]
     if current == nil or current.text ~= line then
       pushLine(line)
@@ -1745,6 +1757,7 @@ function Stream.tick(dt)
       if active.index > #active.lines then
         active = nil
       end
+    end
     end
   end
   local i = 1
