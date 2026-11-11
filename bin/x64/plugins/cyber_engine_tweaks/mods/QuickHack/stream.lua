@@ -12,7 +12,6 @@ local SCROLL_PX_PER_SEC = 18
 local CFG = "bin/x64/plugins/cyber_engine_tweaks/mods/QuickHack/stream.cfg"
 local CFG_VER = 2
 local FONT = "base\\gameplay\\gui\\fonts\\industry\\industry.inkfontfamily"
-local COL = 54
 
 local color = { r = 1.5, g = 0.0, b = 0.0 }
 local opacity = 0.82
@@ -145,10 +144,6 @@ local function titleOf(command)
   if okReds then
     local s = localize(asText(reds))
     if s ~= "" then
-      if not titlePrinted then
-        titlePrinted = true
-        print("QuickHack: stream title " .. s)
-      end
       return s
     end
   end
@@ -162,10 +157,6 @@ local function titleOf(command)
   while i <= #fields do
     local s = localize(asText(fields[i]))
     if s ~= "" then
-      if not titlePrinted then
-        titlePrinted = true
-        print("QuickHack: stream title " .. s)
-      end
       return s
     end
     i = i + 1
@@ -183,10 +174,6 @@ local function titleOf(command)
   if okCat then
     local s = asText(cat)
     if s ~= "" and s ~= "None" then
-      if not titlePrinted then
-        titlePrinted = true
-        print("QuickHack: stream title " .. s)
-      end
       return s
     end
   end
@@ -196,10 +183,6 @@ local function titleOf(command)
   if okPart then
     local s = asText(part)
     if s ~= "" and s ~= "None" then
-      if not titlePrinted then
-        titlePrinted = true
-        print("QuickHack: stream title " .. s)
-      end
       return s
     end
   end
@@ -261,8 +244,6 @@ do
         "  " .. tostring(title or ""),
       }
     end
-  else
-    print("QuickHack: stream scripts loaded")
   end
 end
 

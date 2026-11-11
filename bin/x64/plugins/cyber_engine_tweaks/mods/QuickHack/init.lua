@@ -50,17 +50,12 @@ do
   end
 end
 
-local inputPrinted = {}
 local slot = 1
 while slot <= 9 do
   local index = slot
   local ok, err = pcall(registerInput, "QuickHackSlot" .. index, "Quickhack " .. index, function(keypress)
     if not keypress then
       return
-    end
-    if not inputPrinted[index] then
-      inputPrinted[index] = true
-      print("QuickHack: bound slot " .. index .. " pressed")
     end
     Cast.tryCast(index)
   end)
@@ -75,7 +70,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 65")
+  print("QuickHack ready build 66")
 end)
 
 registerForEvent("onOverlayOpen", function()

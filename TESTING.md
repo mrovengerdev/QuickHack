@@ -54,7 +54,7 @@ Load a save with a cyberdeck, on foot, not in a menu. Bind at least `Quickhack 1
 6. A camera or vehicle uses the same slot row. There is no separate vehicle key row.
 7. Hold the normal scan key. Time stays full speed. The vanilla quickhack list still appears. Scan duration stays the game's per-target time. Our bar still follows the nameplate target.
 8. Open the CET overlay and press the bound key. Nothing casts. Close the overlay and the key works again.
-9. CET console stays quiet during 30 seconds of looking through a crowd. No repeating error line. `QuickHack fills/s=` stays `0` while the nameplate is empty.
+9. CET console stays quiet during 30 seconds of looking through a crowd. No repeating error line, and no per-second status line.
 
 ## Uninstall
 

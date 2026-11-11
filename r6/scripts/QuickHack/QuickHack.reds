@@ -42,28 +42,7 @@ public final func QuickHack_FillCommands() -> array<ref<QuickhackData>> {
   return commands;
 }
 
-
 public class QuickHackCrosshair extends IScriptable {
-  public final static func Target(player: ref<GameObject>) -> ref<GameObject> {
-    let angleDistance: EulerAngles;
-    let component: wref<TargetingComponent>;
-    let searchQuery: TargetSearchQuery;
-    if !IsDefined(player) {
-      return null;
-    };
-    TargetSearchQuery.SetComponentFilter(searchQuery, TargetComponentFilterType.QuickHack);
-    searchQuery.searchFilter = TSF_Quickhackable();
-    searchQuery.maxDistance = SNameplateRangesData.GetMaxDisplayRange();
-    component = GameInstance.GetTargetingSystem(player.GetGame()).GetComponentClosestToCrosshair(player, angleDistance, searchQuery) as TargetingComponent;
-    if !IsDefined(component) {
-      return null;
-    };
-    if AbsF(angleDistance.Yaw) > 12.00 || AbsF(angleDistance.Pitch) > 12.00 {
-      return null;
-    };
-    return component.GetEntity() as GameObject;
-  }
-
   public final static func Closest(player: ref<GameObject>) -> ref<GameObject> {
     let angleDistance: EulerAngles;
     let component: wref<TargetingComponent>;
@@ -97,23 +76,6 @@ public class QuickHackCrosshair extends IScriptable {
     };
     return MaxF(AbsF(angleDistance.Yaw), AbsF(angleDistance.Pitch));
   }
-
-  public final static func AngleText(player: ref<GameObject>) -> String {
-    let angleDistance: EulerAngles;
-    let component: wref<TargetingComponent>;
-    let searchQuery: TargetSearchQuery;
-    if !IsDefined(player) {
-      return "";
-    };
-    TargetSearchQuery.SetComponentFilter(searchQuery, TargetComponentFilterType.QuickHack);
-    searchQuery.searchFilter = TSF_Quickhackable();
-    searchQuery.maxDistance = SNameplateRangesData.GetMaxDisplayRange();
-    component = GameInstance.GetTargetingSystem(player.GetGame()).GetComponentClosestToCrosshair(player, angleDistance, searchQuery) as TargetingComponent;
-    if !IsDefined(component) {
-      return "";
-    };
-    return "yaw=" + FloatToStringPrec(angleDistance.Yaw, 2) + " pitch=" + FloatToStringPrec(angleDistance.Pitch, 2);
-  }
 }
 
 public class QuickHackAim extends IScriptable {
@@ -128,39 +90,7 @@ public class QuickHackAim extends IScriptable {
     };
     return GameInstance.GetTargetingSystem(player.GetGame()).GetLookAtObject(player, true, false);
   }
-
-  public final static func Facing(player: ref<GameObject>, entity: ref<GameObject>) -> Float {
-    let origin: Vector4;
-    let forward: Vector4;
-    let target: Vector4;
-    let dx: Float;
-    let dy: Float;
-    let dz: Float;
-    let fx: Float;
-    let fy: Float;
-    let fz: Float;
-    let dLen: Float;
-    let fLen: Float;
-    if !IsDefined(player) || !IsDefined(entity) {
-      return -2.00;
-    };
-    GameInstance.GetTargetingSystem(player.GetGame()).GetDefaultCrosshairData(player, origin, forward);
-    target = entity.GetWorldPosition();
-    dx = target.X - origin.X;
-    dy = target.Y - origin.Y;
-    dz = target.Z - origin.Z;
-    fx = forward.X;
-    fy = forward.Y;
-    fz = forward.Z;
-    fLen = SqrtF(fx * fx + fy * fy + fz * fz);
-    dLen = SqrtF(dx * dx + dy * dy + dz * dz);
-    if fLen < 0.05 || dLen < 0.25 {
-      return -2.00;
-    };
-    return (fx * dx + fy * dy + fz * dz) / (fLen * dLen);
-  }
 }
-
 
 public class QuickHackIconLoad extends IScriptable {
   public let image: wref<inkImage>;
@@ -232,13 +162,6 @@ public class QuickHackIcons extends IScriptable {
       return "";
     };
     return NameToString(record.AtlasPartName());
-  }
-
-  public final static func AtlasPathOf(command: ref<QuickhackData>) -> String {
-    if !IsDefined(command) {
-      return "";
-    };
-    return QuickHackIcons.AtlasPath(command.m_icon);
   }
 
   public final static func PartNameOf(command: ref<QuickhackData>) -> String {
@@ -313,93 +236,6 @@ public class QuickHackIcons extends IScriptable {
     return false;
   }
 
-  public final static func Attach(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float) -> Bool {
-    let canvas: ref<inkCanvas>;
-    let image: ref<inkImage>;
-    let record: wref<UIIcon_Record>;
-    let margin: inkMargin;
-    let canvasName: CName;
-    let imageName: CName;
-    let old: wref<inkWidget>;
-    if !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return false;
-    };
-    record = TweakDBInterface.GetUIIconRecord(command.m_icon);
-    if !IsDefined(record) {
-      return false;
-    };
-    canvasName = StringToName("qhslot" + IntToString(slot));
-    old = parent.GetWidget(canvasName);
-    if IsDefined(old) {
-      parent.RemoveChild(old);
-    };
-    canvas = new inkCanvas();
-    canvas.SetName(canvasName);
-    canvas.SetAnchor(inkEAnchor.TopLeft);
-    canvas.SetSize(new Vector2(56.00, 56.00));
-    margin.left = x;
-    margin.top = y;
-    margin.right = 0.00;
-    margin.bottom = 0.00;
-    canvas.SetMargin(margin);
-    canvas.Reparent(parent, -1);
-    canvas.SetVisible(true);
-    image = new inkImage();
-    imageName = StringToName("qhicon" + IntToString(slot));
-    image.SetName(imageName);
-    image.SetAnchor(inkEAnchor.Fill);
-    image.SetAnchorPoint(new Vector2(0.50, 0.50));
-    image.SetSize(new Vector2(56.00, 56.00));
-    image.SetFitToContent(false);
-    image.SetVisible(true);
-    image.Reparent(canvas, -1);
-    image.SetAtlasResource(record.AtlasResourcePath());
-    image.SetTexturePart(record.AtlasPartName());
-    QuickHackIcons.RequestIcon(image, command.m_icon, null);
-    return true;
-  }
-
-  public final static func Paint(image: wref<inkImage>, command: ref<QuickhackData>) -> Bool {
-    return QuickHackIcons.PaintFor(image, command, null);
-  }
-
-  public final static func PaintFor(image: wref<inkImage>, command: ref<QuickhackData>, owner: wref<IScriptable>) -> Bool {
-    let record: wref<UIIcon_Record>;
-    if !IsDefined(image) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return false;
-    };
-    record = TweakDBInterface.GetUIIconRecord(command.m_icon);
-    if !IsDefined(record) {
-      return false;
-    };
-    image.SetVisible(true);
-    image.SetFitToContent(false);
-    image.SetSize(new Vector2(56.00, 56.00));
-    image.SetActiveTextureType(inkTextureType.StaticTexture);
-    image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
-    image.SetAtlasResource(record.AtlasResourcePath());
-    image.SetTexturePart(record.AtlasPartName());
-    QuickHackIcons.RequestIcon(image, command.m_icon, owner);
-    return true;
-  }
-
-  public final static func PlaceBottom(widget: wref<inkWidget>, left: Float, bottom: Float, size: Float) -> Bool {
-    let margin: inkMargin;
-    if !IsDefined(widget) {
-      return false;
-    };
-    widget.SetAnchor(inkEAnchor.BottomCenter);
-    widget.SetAnchorPoint(new Vector2(0.00, 1.00));
-    widget.SetSize(new Vector2(size, size));
-    margin.left = left;
-    margin.top = 0.00;
-    margin.right = 0.00;
-    margin.bottom = bottom;
-    widget.SetMargin(margin);
-    widget.SetVisible(true);
-    return true;
-  }
-
   public final static func MakeBarOn(root: wref<inkCompoundWidget>, width: Float, height: Float, bottom: Float) -> wref<inkCanvas> {
     let existing: wref<inkWidget>;
     let bar: ref<inkCanvas>;
@@ -431,46 +267,6 @@ public class QuickHackIcons extends IScriptable {
       return null;
     };
     return QuickHackIcons.MakeBarOn(controller.GetRootCompoundWidget(), width, height, bottom);
-  }
-
-  public final static func PaintSlot(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float, owner: wref<IScriptable>) -> Bool {
-    let record: wref<UIIcon_Record>;
-    let image: ref<inkImage>;
-    let margin: inkMargin;
-    let imageName: CName;
-    let old: wref<inkWidget>;
-    if !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return false;
-    };
-    record = TweakDBInterface.GetUIIconRecord(command.m_icon);
-    if !IsDefined(record) {
-      return false;
-    };
-    imageName = StringToName("qhicon" + IntToString(slot));
-    old = parent.GetWidget(imageName);
-    if IsDefined(old) {
-      parent.RemoveChild(old);
-    };
-    image = new inkImage();
-    image.SetName(imageName);
-    image.SetAnchor(inkEAnchor.TopLeft);
-    image.SetAnchorPoint(new Vector2(0.00, 0.00));
-    image.SetSize(new Vector2(size, size));
-    image.SetFitToContent(false);
-    image.SetVisible(true);
-    image.SetOpacity(1.00);
-    image.SetActiveTextureType(inkTextureType.StaticTexture);
-    image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
-    margin.left = x;
-    margin.top = y;
-    margin.right = 0.00;
-    margin.bottom = 0.00;
-    image.SetMargin(margin);
-    image.Reparent(parent, -1);
-    image.SetAtlasResource(record.AtlasResourcePath());
-    image.SetTexturePart(record.AtlasPartName());
-    QuickHackIcons.RequestIcon(image, command.m_icon, owner);
-    return true;
   }
 
   public final static func TintIcon(widget: wref<inkWidget>, red: Bool) -> Bool {
@@ -516,55 +312,6 @@ public class QuickHackIcons extends IScriptable {
       };
     };
     return null;
-  }
-
-  public final static func TrySpawn(controller: wref<inkGameController>, parent: wref<inkCompoundWidget>, path: ResRef, item: CName, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float) -> Bool {
-    let spawned: wref<inkWidget>;
-    let image: wref<inkImage>;
-    let margin: inkMargin;
-    let spawnName: CName;
-    let imageName: CName;
-    let old: wref<inkWidget>;
-    if !IsDefined(controller) || !IsDefined(parent) || !IsDefined(command) {
-      return false;
-    };
-    spawnName = StringToName("qhspawn" + IntToString(slot));
-    imageName = StringToName("qhicon" + IntToString(slot));
-    old = parent.GetWidget(spawnName);
-    if IsDefined(old) {
-      parent.RemoveChild(old);
-    };
-    old = parent.GetWidget(imageName);
-    if IsDefined(old) {
-      parent.RemoveChild(old);
-    };
-    spawned = controller.SpawnFromExternal(parent, path, item);
-    if !IsDefined(spawned) {
-      return false;
-    };
-    image = QuickHackIcons.FindImage(spawned);
-    if !IsDefined(image) {
-      parent.RemoveChild(spawned);
-      return false;
-    };
-    image.Reparent(parent, -1);
-    parent.RemoveChild(spawned);
-    image.SetName(imageName);
-    image.SetAnchor(inkEAnchor.TopLeft);
-    image.SetAnchorPoint(new Vector2(0.00, 0.00));
-    image.SetSize(new Vector2(size, size));
-    image.SetFitToContent(false);
-    image.SetVisible(true);
-    image.SetOpacity(1.00);
-    image.SetActiveTextureType(inkTextureType.StaticTexture);
-    image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
-    margin.left = x;
-    margin.top = y;
-    margin.right = 0.00;
-    margin.bottom = 0.00;
-    image.SetMargin(margin);
-    QuickHackIcons.RequestIcon(image, command.m_icon, controller);
-    return true;
   }
 
   public final static func TrySpawnOwned(controller: wref<inkGameController>, parent: wref<inkCompoundWidget>, path: ResRef, item: CName, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float) -> Bool {
@@ -632,121 +379,6 @@ public class QuickHackIcons extends IScriptable {
       return "ok";
     };
     return "spawn-nil";
-  }
-
-  public final static func SpawnSlot(controller: wref<inkGameController>, parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float) -> Bool {
-    if !IsDefined(controller) || !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return false;
-    };
-    if QuickHackIcons.TrySpawnOwned(controller, parent, r"quickhack\\hud\\slot.inkwidget", n"Slot", command, slot, x, y, size) {
-      return true;
-    };
-    if QuickHackIcons.TrySpawnOwned(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"VertRoot", command, slot, x, y, size) {
-      return true;
-    };
-    if QuickHackIcons.TrySpawnOwned(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"Root", command, slot, x, y, size) {
-      return true;
-    };
-    if QuickHackIcons.TrySpawnOwned(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"buff", command, slot, x, y, size) {
-      return true;
-    };
-    if QuickHackIcons.TrySpawnOwned(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"icon", command, slot, x, y, size) {
-      return true;
-    };
-    if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"VertRoot", command, slot, x, y, size) {
-      return true;
-    };
-    if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"Root", command, slot, x, y, size) {
-      return true;
-    };
-    if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"buff", command, slot, x, y, size) {
-      return true;
-    };
-    if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"icon", command, slot, x, y, size) {
-      return true;
-    };
-    if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\common\\tooltip\\tooltip_item.inkwidget", n"itemIcon", command, slot, x, y, size) {
-      return true;
-    };
-    return false;
-  }
-
-  public final static func SpawnCodewareSlot(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float, owner: wref<IScriptable>) -> Bool {
-    let old: wref<inkWidget>;
-    let icon: ref<QuickHackSlotIcon>;
-    if !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return false;
-    };
-    old = parent.GetWidget(StringToName("qhspawn" + IntToString(slot)));
-    if IsDefined(old) {
-      parent.RemoveChild(old);
-    };
-    old = parent.GetWidget(StringToName("qhicon" + IntToString(slot)));
-    if IsDefined(old) {
-      parent.RemoveChild(old);
-    };
-    icon = new QuickHackSlotIcon();
-    icon.Reparent(parent);
-    icon.Layout(slot, x, y, size);
-    return icon.Apply(command, owner);
-  }
-}
-
-public class QuickHackSlotIcon extends inkComponent {
-  private let m_image: wref<inkImage>;
-
-  protected cb func OnCreate() -> ref<inkWidget> {
-    let root: ref<inkCanvas>;
-    let image: ref<inkImage>;
-    root = new inkCanvas();
-    root.SetName(n"qhspawn");
-    root.SetAnchor(inkEAnchor.TopLeft);
-    root.SetFitToContent(false);
-    root.SetVisible(true);
-    root.SetOpacity(1.00);
-    image = new inkImage();
-    image.SetName(n"icon");
-    image.SetAnchor(inkEAnchor.Fill);
-    image.SetAnchorPoint(new Vector2(0.50, 0.50));
-    image.SetFitToContent(false);
-    image.SetVisible(true);
-    image.SetOpacity(1.00);
-    image.SetActiveTextureType(inkTextureType.StaticTexture);
-    image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
-    image.Reparent(root);
-    this.m_image = image;
-    return root;
-  }
-
-  public func Layout(slot: Int32, x: Float, y: Float, size: Float) -> Void {
-    let root: wref<inkWidget>;
-    let margin: inkMargin;
-    root = this.GetRootWidget();
-    if !IsDefined(root) {
-      return;
-    };
-    root.SetName(StringToName("qhspawn" + IntToString(slot)));
-    root.SetSize(new Vector2(size, size));
-    margin.left = x;
-    margin.top = y;
-    margin.right = 0.00;
-    margin.bottom = 0.00;
-    root.SetMargin(margin);
-    root.SetVisible(true);
-    if IsDefined(this.m_image) {
-      this.m_image.SetName(StringToName("qhicon" + IntToString(slot)));
-      this.m_image.SetSize(new Vector2(size, size));
-      this.m_image.SetVisible(true);
-      this.m_image.SetOpacity(1.00);
-    };
-  }
-
-  public func Apply(command: ref<QuickhackData>, owner: wref<IScriptable>) -> Bool {
-    if !IsDefined(this.m_image) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return false;
-    };
-    QuickHackIcons.RequestIcon(this.m_image, command.m_icon, owner);
-    return true;
   }
 }
 

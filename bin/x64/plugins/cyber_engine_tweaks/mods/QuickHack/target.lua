@@ -6,9 +6,6 @@ local hoveredKey = nil
 local hoveredEntity = nil
 local generation = 0
 local nextFillAt = 0
-local fillCount = 0
-local fillWindowStart = 0
-local seeded = false
 local hookPrinted = false
 local seenFillErrors = {}
 
@@ -214,12 +211,6 @@ local function copyCommands(src)
   return list
 end
 
-local function methodMissing(err)
-  local text = tostring(err)
-  return string.find(text, "QuickHack_FillCommands", 1, true) ~= nil
-    or string.find(text, "attempt to call", 1, true) ~= nil
-end
-
 local function ownerOf(entity)
   local ok, owner = pcall(function()
     return entity:GetVehicle()
@@ -276,7 +267,6 @@ local function fillList(entity)
   local ok, filled = pcall(function()
     return entity:QuickHack_FillCommands()
   end)
-  fillCount = fillCount + 1
   if not ok then
     local msg = tostring(filled)
     if not seenFillErrors[msg] then
@@ -327,39 +317,6 @@ local function accept(entity)
   end)
   return okVeh and isVeh == true
 end
-
-local function findEntity(eid)
-  if eid == nil then
-    return nil
-  end
-  local ok, entity = pcall(function()
-    return Game.FindEntityByID(eid)
-  end)
-  if ok and isDefined(entity) then
-    return entity
-  end
-  return nil
-end
-
-local function asEntityID(value)
-  if value == nil then
-    return nil
-  end
-  if value.hash ~= nil then
-    return value
-  end
-  if value.playerTarget ~= nil and value.playerTarget.hash ~= nil then
-    return value.playerTarget
-  end
-  local ok, unwrapped = pcall(function()
-    return FromVariant(value)
-  end)
-  if ok and unwrapped ~= nil and unwrapped.hash ~= nil then
-    return unwrapped
-  end
-  return nil
-end
-
 
 local HOVER_DEG = 2.0
 
@@ -495,15 +452,6 @@ end
 
 function Target.tick(dt)
   local now = os.clock()
-  if fillWindowStart == 0 then
-    fillWindowStart = now
-  end
-  if now - fillWindowStart >= 1.0 then
-    print(string.format("QuickHack fills/s=%d", fillCount))
-    fillCount = 0
-    fillWindowStart = now
-  end
-
   if hidden() then
     nextFillAt = 0
     clearDisplay()
@@ -529,37 +477,8 @@ function Target.tick(dt)
   end
 end
 
-function Target.onCommands(value)
-  if value == nil or value.lookAtObject == nil then
-    return
-  end
-  if not accept(value.lookAtObject) then
-    return
-  end
-  local key = entityIdKey(value.lookAtObject)
-  if key == nil then
-    return
-  end
-  if hoveredKey == nil or key ~= hoveredKey then
-    return
-  end
-  targetId = key
-  if value.shouldReveal == false then
-    commands = {}
-    generation = generation + 1
-    return
-  end
-  commands = copyCommands(value.commands)
-  generation = generation + 1
-  nextFillAt = os.clock() + 0.25
-end
-
 function Target.getCommands()
   return commands
-end
-
-function Target.getTargetId()
-  return targetId
 end
 
 function Target.getGeneration()

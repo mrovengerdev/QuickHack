@@ -47,16 +47,6 @@ local function bail(slotIndex, reason)
   print("QuickHack: tryCast slot " .. tostring(slotIndex) .. " skipped: " .. reason)
 end
 
-local function actionDefined(action)
-  if action == nil then
-    return false
-  end
-  local ok, defined = pcall(function()
-    return IsDefined(action)
-  end)
-  return ok and defined == true
-end
-
 function Cast.tryCast(slotIndex)
   if Cast.isOverlay() then
     bail(slotIndex, "overlay open")

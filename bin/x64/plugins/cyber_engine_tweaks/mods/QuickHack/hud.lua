@@ -8,14 +8,13 @@ local ICON_Y = 18
 local NUMBER_Y = 76
 local TITLE_Y = 96
 local RAM_Y = 0
-local RAM_ICON = 14
 local SLOT_W = 76
 local STRIDE = 84
 local BAR_W = 748
 local BAR_H = 114
 local FILL_OPACITY = 0.15
+local MAIN_COLORS = "base\\gameplay\\gui\\common\\main_colors.inkstyle"
 local NUMBER_TINT = nil
-local WHITE = nil
 local RED = nil
 
 local canvas = nil
@@ -24,75 +23,18 @@ local slots = {}
 local overflow = nil
 local built = false
 local lastGen = -1
-local printedFew = false
-local printedMany = false
-local imageErrorPrinted = false
-local partEmptyPrinted = false
-local partPrinted = false
 local inkController = nil
 local inkHost = nil
-local hosted = false
-local hostPrinted = false
-local hostRetry = false
-local barHostPrinted = false
-local spawnPrinted = false
-local wrapPrinted = false
-local libPrinted = false
-local checkPrinted = false
-local spawnFailPrinted = false
 local inkSpawner = nil
-local spawnerPrinted = false
-
-local function screenX(widget)
-  local ok, pos = pcall(function()
-    return widget:GetScreenPosition()
-  end)
-  if ok and pos ~= nil then
-    if pos.X ~= nil then
-      return pos.X
-    end
-    if pos.x ~= nil then
-      return pos.x
-    end
-  end
-  local okMargin, margin = pcall(function()
-    return widget:GetMargin()
-  end)
-  if okMargin and margin ~= nil then
-    if margin.left ~= nil then
-      return margin.left
-    end
-    if margin.Left ~= nil then
-      return margin.Left
-    end
-  end
-  return nil
-end
-
-local function tryPrintSlot1(count)
-  if slots[1] == nil or slots[1].icon == nil then
-    return false
-  end
-  local x = screenX(slots[1].icon)
-  if x == nil then
-    return false
-  end
-  print(string.format("QuickHack slot1 x=%.4f count=%d", x, count))
-  return true
-end
-
-local function noteSlot1(count)
-  if count >= 1 and count <= 3 and not printedFew then
-    if tryPrintSlot1(count) then
-      printedFew = true
-    end
-  end
-  if count >= 8 and not printedMany then
-    if tryPrintSlot1(count) then
-      printedMany = true
-    end
-  end
-end
+local hosted = false
+local hostRetry = false
+local windowPrinted = false
+local wrapPrinted = false
+local spawnFailPrinted = false
+local tintPrinted = false
+local iconTintPrinted = false
+local costPrinted = false
+local buildErrorPrinted = false
 
 local function place(widget, x, y, w, h)
   widget:SetAnchor(inkEAnchor.TopLeft)
@@ -115,99 +57,34 @@ local function makeText(x, y, w, h, size, tint, text)
   return label
 end
 
+-- Lua cannot read QuickhackData fields, so the title comes from redscript.
 local function optionText(command)
   if command == nil then
     return ""
   end
-  local okReds, reds = pcall(function()
+  local ok, reds = pcall(function()
     return QuickHackIcons.TitleOf(command)
   end)
-  if okReds and reds ~= nil then
-    local text = tostring(reds)
-    if text ~= "" and string.sub(text, 1, 8) ~= "userdata" then
-      if string.sub(text, 1, 7) == "LocKey#" then
-        local ok, localized = pcall(function()
-          return GetLocalizedText(text)
-        end)
-        if ok and localized ~= nil and tostring(localized) ~= "" then
-          return tostring(localized)
-        end
-      else
-        return text
-      end
-    end
+  if not ok or reds == nil then
+    return ""
   end
-  local title = command.m_title
-  if title == nil or tostring(title) == "" then
-    title = command.title
-  end
-  if title == nil or tostring(title) == "" then
-    title = command.m_titleAlternative
-  end
-  if title == nil or tostring(title) == "" then
-    title = command.titleAlternative
-  end
-  local text = title == nil and "" or tostring(title)
+  local text = tostring(reds)
   if string.sub(text, 1, 8) == "userdata" then
-    text = ""
+    return ""
   end
   if string.sub(text, 1, 7) == "LocKey#" then
-    local ok, localized = pcall(function()
+    local okLoc, localized = pcall(function()
       return GetLocalizedText(text)
     end)
-    if ok and localized ~= nil and tostring(localized) ~= "" then
+    if okLoc and localized ~= nil and tostring(localized) ~= "" then
       return tostring(localized)
     end
   end
   return text
 end
 
-
-local function iconStrings(command)
-  local path, part = "", ""
-  local okPath, redsPath = pcall(function()
-    return QuickHackIcons.AtlasPathOf(command)
-  end)
-  local okPart, redsPart = pcall(function()
-    return QuickHackIcons.PartNameOf(command)
-  end)
-  if okPath and redsPath ~= nil then
-    path = tostring(redsPath)
-  end
-  if okPart and redsPart ~= nil then
-    part = tostring(redsPart)
-  end
-  return path, part
-end
-
-local function applyAtlas(icon, path, part, size)
-  if icon == nil or path == nil or path == "" or part == nil or part == "" or part == "None" then
-    return false
-  end
-  local ok = pcall(function()
-    pcall(function()
-      icon:SetStyle(ResRef.FromString("base\\gameplay\\gui\\common\\main_colors.inkstyle"))
-    end)
-    icon:SetAtlasResource(ResRef.FromString(path))
-    icon:SetTexturePart(CName.new(part))
-    icon:SetFitToContent(false)
-    icon:SetSize(Vector2.new({ X = size, Y = size }))
-    icon:SetVisible(true)
-    icon:SetTintColor(WHITE)
-    icon:SetOpacity(1.0)
-  end)
-  if not ok then
-    ok = pcall(function()
-      icon:SetAtlasResource(path)
-      icon:SetTexturePart(part)
-      icon:SetFitToContent(false)
-      icon:SetSize(Vector2.new({ X = size, Y = size }))
-      icon:SetVisible(true)
-    end)
-  end
-  return ok
-end
-
+-- Spawns the Slot item from quickhack.archive and loads the game's own
+-- quickhack sprite into it. The spawned widget is named qhicon<index>.
 local function applyIcon(slot, command)
   if command == nil or canvas == nil then
     return
@@ -216,133 +93,40 @@ local function applyIcon(slot, command)
     return QuickHackIcons.DebugOf(command)
   end)
   if not okKey or key == nil then
-    key = "error " .. tostring(key)
+    return
   end
   key = tostring(key)
-  if not checkPrinted then
-    checkPrinted = true
-    print("QuickHack: icon check " .. key)
-  end
-  if string.sub(key, 1, 5) == "error" or key == "no-command" or key == "icon-id-invalid" or key == "no-uiicon-record" then
+  if key == "no-command" or key == "icon-id-invalid" or key == "no-uiicon-record" then
+    slot.iconKey = nil
     return
   end
   if key == slot.iconKey and slot.icon ~= nil then
     return
   end
-  local painted = false
-  local libCtrl = inkController or inkSpawner
-  local okLib, libReason = pcall(function()
-    return QuickHackIcons.LibraryReason(libCtrl, canvas, command, slot.index, slot.x + 10, ICON_Y, ICON)
+  slot.icon = nil
+  slot.iconKey = nil
+  local okLib, reason = pcall(function()
+    return QuickHackIcons.LibraryReason(inkController or inkSpawner, canvas, command, slot.index, slot.x + 10, ICON_Y, ICON)
   end)
   if not okLib then
-    libReason = "error " .. tostring(libReason)
+    reason = "error " .. tostring(reason)
   end
-  if libReason == "ok" then
-    painted = true
-  end
-  if not libPrinted then
-    libPrinted = true
-    print("QuickHack: slot library spawn " .. tostring(libReason))
-  end
-  if not painted then
-    local okCW, redsCW = pcall(function()
-      return QuickHackIcons.SpawnCodewareSlot(canvas, command, slot.index, slot.x + 10, ICON_Y, ICON, inkController or inkSpawner)
-    end)
-    if okCW and redsCW == true then
-      painted = true
-      if not spawnPrinted then
-        spawnPrinted = true
-        print("QuickHack: icon spawned with Codeware component")
-      end
-    elseif okCW ~= true and not spawnPrinted then
-      spawnPrinted = true
-      print("QuickHack: Codeware icon spawn error: " .. tostring(redsCW))
-    end
-  end
-  local spawner = inkSpawner or inkController
-  if not painted and spawner ~= nil then
-    local okSpawn, redsSpawn = pcall(function()
-      return QuickHackIcons.SpawnSlot(spawner, canvas, command, slot.index, slot.x + 10, ICON_Y, ICON)
-    end)
-    if okSpawn and redsSpawn == true then
-      painted = true
-      if not spawnPrinted then
-        spawnPrinted = true
-        print("QuickHack: icon spawned from HUD library")
-      end
-    elseif okSpawn ~= true and not spawnPrinted then
-      spawnPrinted = true
-      print("QuickHack: icon spawn error: " .. tostring(redsSpawn))
-    elseif okSpawn == true and redsSpawn ~= true and not spawnFailPrinted then
+  if reason ~= "ok" then
+    if not spawnFailPrinted then
       spawnFailPrinted = true
-      if inkSpawner == nil then
-        print("QuickHack: icon spawn returned false (no healthbar spawner yet)")
-      else
-        print("QuickHack: icon spawn returned false")
-      end
-    end
-  end
-  local okPaint, redsPaint
-  if not painted then
-    okPaint, redsPaint = pcall(function()
-      return QuickHackIcons.PaintSlot(canvas, command, slot.index, slot.x + 10, ICON_Y, ICON, inkSpawner or inkController)
-    end)
-  end
-  if (painted) or (okPaint and redsPaint == true) then
-    painted = true
-    pcall(function()
-      local widget = canvas:GetWidget(CName.new("qhicon" .. tostring(slot.index)))
-      if widget == nil then
-        widget = canvas:GetWidget(CName.new("qhspawn" .. tostring(slot.index)))
-      end
-      if widget ~= nil then
-        slot.icon = widget
-        slot.icon:SetOpacity(1.0)
-        slot.icon:SetVisible(true)
-      end
-    end)
-  end
-  if not painted and slot.placeholder ~= nil then
-    local okOld, redsOld = pcall(function()
-      return QuickHackIcons.PaintFor(slot.placeholder, command, inkSpawner or inkController or Game.GetPlayer())
-    end)
-    if okOld and redsOld == true then
-      painted = true
-    end
-    local path, part = iconStrings(command)
-    if (path == nil or path == "") and part ~= nil and part ~= "" and part ~= "None" then
-      path = "base\\gameplay\\gui\\common\\icons\\quickhacks_icons.inkatlas"
-    end
-    if applyAtlas(slot.placeholder, path, part, ICON) then
-      painted = true
-    end
-    if painted then
-      slot.icon = slot.placeholder
-    end
-  end
-  local path, part = iconStrings(command)
-  local okDbg, dbg = pcall(function()
-    return QuickHackIcons.DebugOf(command)
-  end)
-  if not okDbg then
-    dbg = tostring(dbg)
-  end
-  if painted then
-    slot.iconKey = key
-    if not partPrinted then
-      partPrinted = true
-      local host = "no-host"
-      if hosted then
-        host = "hosted"
-      end
-      print("QuickHack: icon painted " .. tostring(path) .. " " .. tostring(part) .. " " .. tostring(dbg) .. " " .. host)
+      print("QuickHack: slot library spawn " .. tostring(reason))
     end
     return
   end
-  if not imageErrorPrinted then
-    imageErrorPrinted = true
-    print("QuickHack: icon paint failed " .. tostring(path) .. " " .. tostring(part) .. " " .. tostring(dbg))
-  end
+  pcall(function()
+    local widget = canvas:GetWidget(CName.new("qhicon" .. tostring(slot.index)))
+    if widget ~= nil then
+      slot.icon = widget
+      widget:SetOpacity(1.0)
+      widget:SetVisible(true)
+    end
+  end)
+  slot.iconKey = key
 end
 
 local function availableRam()
@@ -369,49 +153,36 @@ local function availableRam()
   return nil
 end
 
-local costTypePrinted = false
-
 local function readCost(command)
   local ok, cost = pcall(function()
     return QuickHackIcons.CostOf(command)
   end)
-  if not ok or cost == nil then
-    if not costTypePrinted then
-      costTypePrinted = true
-      print("QuickHack: cost type " .. type(cost) .. " " .. tostring(cost))
+  local value = nil
+  if ok and cost ~= nil then
+    value = cost
+    if type(cost) ~= "number" then
+      value = tonumber(tostring(cost))
     end
-    return nil
-  end
-  local value = cost
-  if type(cost) ~= "number" then
-    value = tonumber(tostring(cost))
   end
   if type(value) ~= "number" then
-    if not costTypePrinted then
-      costTypePrinted = true
-      print("QuickHack: cost type " .. type(cost) .. " " .. tostring(cost))
+    if not costPrinted then
+      costPrinted = true
+      print("QuickHack: cost read failed " .. type(cost) .. " " .. tostring(cost))
     end
     return nil
   end
   if value < 0 then
     return nil
   end
-  if value == 0 and not costTypePrinted then
-    costTypePrinted = true
-    print("QuickHack: cost type " .. type(cost) .. " value 0")
-  end
   return math.floor(value + 0.001)
 end
-
-local tintPrinted = false
-local iconTintPrinted = false
 
 local function gameTint(widget, unaffordable)
   if widget == nil then
     return
   end
   local ok = pcall(function()
-    widget:SetStyle(ResRef.FromString("base\\gameplay\\gui\\common\\main_colors.inkstyle"))
+    widget:SetStyle(ResRef.FromString(MAIN_COLORS))
     widget:BindProperty(CName.new("tintColor"), CName.new(unaffordable and "MainColors.Red" or "MainColors.Blue"))
   end)
   if not ok then
@@ -422,6 +193,17 @@ local function gameTint(widget, unaffordable)
     pcall(function()
       widget:SetTintColor(unaffordable and RED or NUMBER_TINT)
     end)
+  end
+end
+
+local function eachEdge(slot, fn)
+  if slot.edges == nil then
+    return
+  end
+  local edge = 1
+  while slot.edges[edge] ~= nil do
+    fn(slot.edges[edge])
+    edge = edge + 1
   end
 end
 
@@ -457,65 +239,41 @@ local function paintRam(slot, command)
         print("QuickHack: icon tint failed " .. tostring(tinted))
       end
       gameTint(slot.icon, unaffordable)
-    elseif not iconTintPrinted then
-      iconTintPrinted = true
-      print("QuickHack: icon tinted with game colors")
     end
   end
-  if slot.edges ~= nil then
-    local edge = 1
-    while slot.edges[edge] ~= nil do
-      gameTint(slot.edges[edge], unaffordable)
-      slot.edges[edge]:SetOpacity(0.75)
-      slot.edges[edge]:SetVisible(true)
-      edge = edge + 1
-    end
-  end
+  eachEdge(slot, function(edge)
+    gameTint(edge, unaffordable)
+    edge:SetOpacity(0.75)
+    edge:SetVisible(true)
+  end)
 end
 
 local function hideSlot(slot)
   if slot.fill ~= nil then
     slot.fill:SetVisible(false)
   end
-  if slot.edges ~= nil then
-    local edge = 1
-    while slot.edges[edge] ~= nil do
-      slot.edges[edge]:SetVisible(false)
-      edge = edge + 1
-    end
-  end
-  if slot.placeholder ~= nil then
-    slot.placeholder:SetVisible(false)
-  end
+  eachEdge(slot, function(edge)
+    edge:SetVisible(false)
+  end)
   if slot.icon ~= nil then
-    slot.icon:SetVisible(false)
-  end
-  if slot.spawned ~= nil then
     pcall(function()
-      slot.spawned:SetVisible(false)
+      slot.icon:SetVisible(false)
     end)
-    slot.spawned = nil
-  end
-  if slot.slotCanvas ~= nil then
-    pcall(function()
-      slot.slotCanvas:SetVisible(false)
-    end)
-    slot.slotCanvas = nil
   end
   if canvas ~= nil and slot.index ~= nil then
     pcall(function()
-      local names = { "qhslot", "qhspawn", "qhicon" }
+      local names = { "qhspawn", "qhicon" }
       local n = 1
       while names[n] ~= nil do
         local old = canvas:GetWidget(CName.new(names[n] .. tostring(slot.index)))
-        if old ~= nil and old ~= slot.placeholder then
+        if old ~= nil then
           canvas:RemoveChild(old)
         end
         n = n + 1
       end
     end)
   end
-  slot.icon = slot.placeholder
+  slot.icon = nil
   slot.iconKey = nil
   if slot.number ~= nil then
     slot.number:SetVisible(false)
@@ -526,9 +284,6 @@ local function hideSlot(slot)
   if slot.ramText ~= nil then
     slot.ramText:SetVisible(false)
   end
-  if slot.ramIcon ~= nil then
-    slot.ramIcon:SetVisible(false)
-  end
 end
 
 local function showSlot(slot, command)
@@ -538,34 +293,20 @@ local function showSlot(slot, command)
   slot.number:SetVisible(true)
   slot.title:SetVisible(true)
   slot.title:SetText(optionText(command))
-  if slot.edges ~= nil then
-    local edge = 1
-    while slot.edges[edge] ~= nil do
-      slot.edges[edge]:SetOpacity(0.75)
-      slot.edges[edge]:SetVisible(true)
-      edge = edge + 1
-    end
-  end
+  eachEdge(slot, function(edge)
+    edge:SetOpacity(0.75)
+    edge:SetVisible(true)
+  end)
   applyIcon(slot, command)
-  if slot.iconKey == nil then
-    if slot.placeholder ~= nil then
-      slot.placeholder:SetVisible(false)
-    end
-    if slot.icon ~= nil and slot.icon ~= slot.placeholder then
-      pcall(function()
+  if slot.icon ~= nil then
+    pcall(function()
+      if slot.iconKey == nil then
         slot.icon:SetVisible(false)
-      end)
-    end
-  else
-    if slot.icon ~= nil then
-      pcall(function()
+      else
         slot.icon:SetOpacity(opacity)
         slot.icon:SetVisible(true)
-      end)
-    end
-    if slot.placeholder ~= nil and slot.placeholder ~= slot.icon then
-      slot.placeholder:SetVisible(false)
-    end
+      end
+    end)
   end
   paintRam(slot, command)
 end
@@ -581,7 +322,6 @@ local function build()
   end
 
   NUMBER_TINT = HDRColor.new({ Red = 0.3686, Green = 0.9647, Blue = 1.1888, Alpha = 1.0 })
-  WHITE = HDRColor.new({ Red = 1.0, Green = 1.0, Blue = 1.0, Alpha = 1.0 })
   RED = HDRColor.new({ Red = 1.0, Green = 0.15, Blue = 0.15, Alpha = 1.0 })
 
   canvas = nil
@@ -619,13 +359,9 @@ local function build()
     parent = host
   end
 
-  if not barHostPrinted then
-    barHostPrinted = true
-    if hosted then
-      print("QuickHack: bar hosted on HUD")
-    else
-      print("QuickHack: bar on virtual window")
-    end
+  if not hosted and not windowPrinted then
+    windowPrinted = true
+    print("QuickHack: bar on virtual window")
   end
 
   slots = {}
@@ -666,18 +402,6 @@ local function build()
       edge = edge + 1
     end
 
-    local icon = inkImage.new()
-    icon:SetName(CName.new("qhicon" .. tostring(i)))
-    icon:SetAnchor(inkEAnchor.TopLeft)
-    place(icon, x + 10, ICON_Y, ICON, ICON)
-    icon:SetFitToContent(false)
-    icon:SetTintColor(WHITE)
-    icon:SetVisible(false)
-    pcall(function()
-      icon:SetActiveTextureType(inkTextureType.StaticTexture)
-    end)
-    icon:Reparent(canvas, -1)
-
     local ramText = makeText(x, RAM_Y, SLOT_W, 16, 14, NUMBER_TINT, "")
     local number = makeText(x, NUMBER_Y, SLOT_W, 18, 18, NUMBER_TINT, tostring(i))
     local title = makeText(x, TITLE_Y, SLOT_W, 30, 13, NUMBER_TINT, "")
@@ -693,8 +417,7 @@ local function build()
       print("QuickHack: title wrap failed " .. tostring(wrapErr))
     end
     slots[i] = {
-      placeholder = icon,
-      icon = icon,
+      icon = nil,
       edges = edges,
       fill = fill,
       number = number,
@@ -729,44 +452,19 @@ local function bindHud()
     pcall(function()
       inkHost = ctrl:GetRootCompoundWidget()
     end)
-    if not hostPrinted then
-      hostPrinted = true
-      local name = ""
-      pcall(function()
-        name = NameToString(ctrl:GetClassName())
-      end)
-      if name == "" then
-        name = tostring(ctrl)
-      end
-      print("QuickHack: HUD host bound " .. name)
-    end
   end)
 end
 
 -- Do not walk up to the HUD layer root or reparent onto the healthbar or
--- minimap: that disabled the game HUD in build 55. inkSpawner is only
--- the SpawnFromExternal controller; the bar stays on our canvas.
-local function captureSpawner(this)
-  if this == nil then
-    return
-  end
-  inkSpawner = this
-  if not spawnerPrinted then
-    spawnerPrinted = true
-    local name = ""
-    pcall(function()
-      name = NameToString(this:GetClassName())
-    end)
-    if name == "" then
-      name = tostring(this)
-    end
-    print("QuickHack: icon spawner bound " .. name)
-  end
-end
-
+-- minimap: that disabled the game HUD in build 55. inkSpawner is only a
+-- fallback SpawnFromExternal controller; the bar stays on our canvas.
 local function hookSpawner(className, method)
   local ok, err = pcall(function()
-    ObserveAfter(className, method, captureSpawner)
+    ObserveAfter(className, method, function(this)
+      if this ~= nil then
+        inkSpawner = this
+      end
+    end)
   end)
   if not ok then
     print("QuickHack: could not hook " .. className .. "." .. method .. ": " .. tostring(err))
@@ -776,14 +474,13 @@ end
 function Hud.install()
   -- Do not Observe OnInitialize on HUD subclasses: CET errors with
   -- "Function OnInitialize in class ... does not exist" because the
-  -- method is defined on a parent. Hook OnPlayerAttach on controllers
-  -- whose widget libraries can spawn vanilla icon items.
+  -- method is defined on a parent.
   hookSpawner("healthbarWidgetGameController", "OnPlayerAttach")
   hookSpawner("gameuiHudHealthbarGameController", "OnPlayerAttach")
   hookSpawner("MinimapContainerController", "OnPlayerAttach")
 end
 
-function Hud.invalidate()
+local function teardown()
   if canvas ~= nil and parent ~= nil then
     pcall(function()
       parent:RemoveChild(canvas)
@@ -798,6 +495,10 @@ function Hud.invalidate()
   hosted = false
 end
 
+function Hud.invalidate()
+  teardown()
+end
+
 function Hud.ensure()
   bindHud()
   if built and canvas ~= nil then
@@ -805,12 +506,12 @@ function Hud.ensure()
       canvas:GetName()
     end)
     if not alive then
-      Hud.invalidate()
+      teardown()
     end
   end
   if built and not hosted and inkController ~= nil and not hostRetry then
     hostRetry = true
-    Hud.invalidate()
+    teardown()
   end
   if built then
     return
@@ -819,16 +520,7 @@ function Hud.ensure()
   if ok and built then
     return
   end
-  if canvas ~= nil and parent ~= nil then
-    pcall(function()
-      parent:RemoveChild(canvas)
-    end)
-  end
-  canvas = nil
-  parent = nil
-  slots = {}
-  overflow = nil
-  built = false
+  teardown()
   if not ok and not buildErrorPrinted then
     buildErrorPrinted = true
     print("QuickHack: bar build failed: " .. tostring(err))
@@ -841,6 +533,7 @@ function Hud.refresh()
   end
   local list = Target.getCommands()
   local count = #list
+  local gen = Target.getGeneration()
   if count == 0 then
     local i = 1
     while i <= SLOT_COUNT do
@@ -849,10 +542,9 @@ function Hud.refresh()
     end
     overflow:SetVisible(false)
     canvas:SetVisible(false)
-    lastGen = Target.getGeneration()
+    lastGen = gen
     return
   end
-  local gen = Target.getGeneration()
   local ramIndex = 1
   while ramIndex <= SLOT_COUNT do
     local command = list[ramIndex]
@@ -862,15 +554,10 @@ function Hud.refresh()
     ramIndex = ramIndex + 1
   end
   if gen == lastGen then
-    if not printedFew or not printedMany then
-      noteSlot1(count)
-    end
     return
   end
   lastGen = gen
 
-  local list = Target.getCommands()
-  local count = #list
   local i = 1
   while i <= SLOT_COUNT do
     local command = list[i]
@@ -889,22 +576,11 @@ function Hud.refresh()
     overflow:SetVisible(false)
   end
 
-  canvas:SetVisible(count > 0)
-  noteSlot1(count)
+  canvas:SetVisible(true)
 end
 
 function Hud.destroy()
-  if canvas ~= nil and parent ~= nil then
-    pcall(function()
-      parent:RemoveChild(canvas)
-    end)
-  end
-  canvas = nil
-  parent = nil
-  slots = {}
-  overflow = nil
-  built = false
-  lastGen = -1
+  teardown()
 end
 
 return Hud
