@@ -162,7 +162,58 @@ public class QuickHackAim extends IScriptable {
 }
 
 
+public class QuickHackIconLoad extends IScriptable {
+  public let image: wref<inkImage>;
+  public let part: CName;
+
+  public func OnIconLoaded() -> Void {
+    if IsDefined(this.image) {
+      this.image.SetVisible(true);
+      this.image.SetOpacity(1.00);
+      if NotEquals(this.part, n"") {
+        this.image.SetTexturePart(this.part);
+      };
+    };
+  }
+}
+
 public class QuickHackIcons extends IScriptable {
+  private static let s_pending: array<ref<QuickHackIconLoad>>;
+
+  private static func KeepLoad(load: ref<QuickHackIconLoad>) -> Void {
+    ArrayPush(QuickHackIcons.s_pending, load);
+    while ArraySize(QuickHackIcons.s_pending) > 24 {
+      ArrayErase(QuickHackIcons.s_pending, 0);
+    };
+  }
+
+  public static func RequestIcon(image: wref<inkImage>, iconID: TweakDBID, owner: wref<IScriptable>) -> Void {
+    let iconRef: ref<UIIconReference>;
+    let load: ref<QuickHackIconLoad>;
+    let record: wref<UIIcon_Record>;
+    let controller: wref<inkGameController>;
+    if !IsDefined(image) || !TDBID.IsValid(iconID) {
+      return;
+    };
+    iconRef = new UIIconReference();
+    iconRef.iconID = iconID;
+    load = new QuickHackIconLoad();
+    load.image = image;
+    record = TweakDBInterface.GetUIIconRecord(iconID);
+    if IsDefined(record) {
+      load.part = record.AtlasPartName();
+    };
+    QuickHackIcons.KeepLoad(load);
+    if IsDefined(owner) {
+      controller = owner as inkGameController;
+      if IsDefined(controller) {
+        InkImageUtils.RequestSetImage(controller, image, iconID);
+      };
+    };
+    image.RequestSetImage(iconRef, load, n"OnIconLoaded");
+  }
+
+
   public final static func DebugOf(command: ref<QuickhackData>) -> String {
     let path: String;
     let part: String;
@@ -279,7 +330,6 @@ public class QuickHackIcons extends IScriptable {
     let canvas: ref<inkCanvas>;
     let image: ref<inkImage>;
     let record: wref<UIIcon_Record>;
-    let iconRef: ref<UIIconReference>;
     let margin: inkMargin;
     let canvasName: CName;
     let imageName: CName;
@@ -318,9 +368,7 @@ public class QuickHackIcons extends IScriptable {
     image.Reparent(canvas, -1);
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
-    iconRef = new UIIconReference();
-    iconRef.iconID = command.m_icon;
-    image.RequestSetImage(iconRef);
+    QuickHackIcons.RequestIcon(image, command.m_icon, null);
     return true;
   }
 
@@ -330,8 +378,6 @@ public class QuickHackIcons extends IScriptable {
 
   public final static func PaintFor(image: wref<inkImage>, command: ref<QuickhackData>, owner: wref<IScriptable>) -> Bool {
     let record: wref<UIIcon_Record>;
-    let iconRef: ref<UIIconReference>;
-    let controller: wref<inkGameController>;
     if !IsDefined(image) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
       return false;
     };
@@ -346,18 +392,7 @@ public class QuickHackIcons extends IScriptable {
     image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
-    iconRef = new UIIconReference();
-    iconRef.iconID = command.m_icon;
-    if IsDefined(owner) {
-      controller = owner as inkGameController;
-      if IsDefined(controller) {
-        InkImageUtils.RequestSetImage(controller, image, command.m_icon);
-      } else {
-        image.RequestSetImage(iconRef, owner);
-      };
-    } else {
-      image.RequestSetImage(iconRef);
-    };
+    QuickHackIcons.RequestIcon(image, command.m_icon, owner);
     return true;
   }
 
@@ -414,8 +449,6 @@ public class QuickHackIcons extends IScriptable {
   public final static func PaintSlot(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float, owner: wref<IScriptable>) -> Bool {
     let record: wref<UIIcon_Record>;
     let image: ref<inkImage>;
-    let iconRef: ref<UIIconReference>;
-    let controller: wref<inkGameController>;
     let margin: inkMargin;
     let imageName: CName;
     let old: wref<inkWidget>;
@@ -449,18 +482,7 @@ public class QuickHackIcons extends IScriptable {
     image.Reparent(parent, -1);
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
-    iconRef = new UIIconReference();
-    iconRef.iconID = command.m_icon;
-    if IsDefined(owner) {
-      controller = owner as inkGameController;
-      if IsDefined(controller) {
-        InkImageUtils.RequestSetImage(controller, image, command.m_icon);
-      } else {
-        image.RequestSetImage(iconRef, owner);
-      };
-    } else {
-      image.RequestSetImage(iconRef);
-    };
+    QuickHackIcons.RequestIcon(image, command.m_icon, owner);
     return true;
   }
 
@@ -535,7 +557,7 @@ public class QuickHackIcons extends IScriptable {
     margin.right = 0.00;
     margin.bottom = 0.00;
     image.SetMargin(margin);
-    InkImageUtils.RequestSetImage(controller, image, command.m_icon);
+    QuickHackIcons.RequestIcon(image, command.m_icon, controller);
     return true;
   }
 
@@ -586,7 +608,7 @@ public class QuickHackIcons extends IScriptable {
     image.SetOpacity(1.00);
     image.SetActiveTextureType(inkTextureType.StaticTexture);
     image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
-    InkImageUtils.RequestSetImage(controller, image, command.m_icon);
+    QuickHackIcons.RequestIcon(image, command.m_icon, controller);
     return true;
   }
 
