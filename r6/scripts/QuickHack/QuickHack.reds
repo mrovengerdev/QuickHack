@@ -229,6 +229,34 @@ public class QuickHackIcons extends IScriptable {
     return command.m_cost;
   }
 
+  public final static func TitleOf(command: ref<QuickhackData>) -> String {
+    let title: String;
+    let localized: String;
+    let part: String;
+    if !IsDefined(command) {
+      return "";
+    };
+    title = command.m_title;
+    if StrLen(title) == 0 {
+      title = command.m_titleAlternative;
+    };
+    if StrLen(title) > 0 {
+      localized = GetLocalizedText(title);
+      if StrLen(localized) > 0 {
+        return localized;
+      };
+      return title;
+    };
+    if NotEquals(command.m_iconCategory, n"") && NotEquals(command.m_iconCategory, n"None") {
+      return NameToString(command.m_iconCategory);
+    };
+    part = QuickHackIcons.PartNameOf(command);
+    if StrLen(part) > 0 && NotEquals(part, "None") {
+      return part;
+    };
+    return "";
+  }
+
   public final static func Attach(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float) -> Bool {
     let canvas: ref<inkCanvas>;
     let image: ref<inkImage>;
@@ -532,6 +560,18 @@ public class QuickHackIcons extends IScriptable {
     if QuickHackIcons.TrySpawnOwned(controller, parent, r"quickhack\\hud\\slot.inkwidget", n"Slot", command, slot, x, y, size) {
       return true;
     };
+    if QuickHackIcons.TrySpawnOwned(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"VertRoot", command, slot, x, y, size) {
+      return true;
+    };
+    if QuickHackIcons.TrySpawnOwned(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"Root", command, slot, x, y, size) {
+      return true;
+    };
+    if QuickHackIcons.TrySpawnOwned(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"buff", command, slot, x, y, size) {
+      return true;
+    };
+    if QuickHackIcons.TrySpawnOwned(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"icon", command, slot, x, y, size) {
+      return true;
+    };
     if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"VertRoot", command, slot, x, y, size) {
       return true;
     };
@@ -550,6 +590,7 @@ public class QuickHackIcons extends IScriptable {
     return false;
   }
 }
+
 
 public class QuickHackCast extends IScriptable {
   public final static func Execute(player: ref<GameObject>, command: ref<QuickhackData>) -> Bool {

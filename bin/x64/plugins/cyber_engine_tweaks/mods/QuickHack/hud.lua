@@ -35,6 +35,9 @@ local hostPrinted = false
 local hostRetry = false
 local barHostPrinted = false
 local spawnPrinted = false
+local spawnFailPrinted = false
+local inkSpawner = nil
+local spawnerPrinted = false
 
 local function screenX(widget)
   local ok, pos = pcall(function()
@@ -109,11 +112,41 @@ local function makeText(x, y, w, h, size, tint, text)
 end
 
 local function optionText(command)
+  if command == nil then
+    return ""
+  end
+  local okReds, reds = pcall(function()
+    return QuickHackIcons.TitleOf(command)
+  end)
+  if okReds and reds ~= nil then
+    local text = tostring(reds)
+    if text ~= "" and string.sub(text, 1, 8) ~= "userdata" then
+      if string.sub(text, 1, 7) == "LocKey#" then
+        local ok, localized = pcall(function()
+          return GetLocalizedText(text)
+        end)
+        if ok and localized ~= nil and tostring(localized) ~= "" then
+          return tostring(localized)
+        end
+      else
+        return text
+      end
+    end
+  end
   local title = command.m_title
+  if title == nil or tostring(title) == "" then
+    title = command.title
+  end
   if title == nil or tostring(title) == "" then
     title = command.m_titleAlternative
   end
+  if title == nil or tostring(title) == "" then
+    title = command.titleAlternative
+  end
   local text = title == nil and "" or tostring(title)
+  if string.sub(text, 1, 8) == "userdata" then
+    text = ""
+  end
   if string.sub(text, 1, 7) == "LocKey#" then
     local ok, localized = pcall(function()
       return GetLocalizedText(text)
@@ -180,9 +213,10 @@ local function applyIcon(slot, command)
     return
   end
   local painted = false
-  if inkController ~= nil then
+  local spawner = inkSpawner or inkController
+  if spawner ~= nil then
     local okSpawn, redsSpawn = pcall(function()
-      return QuickHackIcons.SpawnSlot(inkController, canvas, command, slot.index, slot.x + 10, ICON_Y, ICON)
+      return QuickHackIcons.SpawnSlot(spawner, canvas, command, slot.index, slot.x + 10, ICON_Y, ICON)
     end)
     if okSpawn and redsSpawn == true then
       painted = true
@@ -193,12 +227,19 @@ local function applyIcon(slot, command)
     elseif okSpawn ~= true and not spawnPrinted then
       spawnPrinted = true
       print("QuickHack: icon spawn error: " .. tostring(redsSpawn))
+    elseif okSpawn == true and redsSpawn ~= true and not spawnFailPrinted then
+      spawnFailPrinted = true
+      if inkSpawner == nil then
+        print("QuickHack: icon spawn returned false (no healthbar spawner yet)")
+      else
+        print("QuickHack: icon spawn returned false")
+      end
     end
   end
   local okPaint, redsPaint
   if not painted then
     okPaint, redsPaint = pcall(function()
-      return QuickHackIcons.PaintSlot(canvas, command, slot.index, slot.x + 10, ICON_Y, ICON, inkController)
+      return QuickHackIcons.PaintSlot(canvas, command, slot.index, slot.x + 10, ICON_Y, ICON, inkSpawner or inkController)
     end)
   end
   if (painted) or (okPaint and redsPaint == true) then
@@ -220,7 +261,7 @@ local function applyIcon(slot, command)
   end
   if not painted and slot.placeholder ~= nil then
     local okOld, redsOld = pcall(function()
-      return QuickHackIcons.PaintFor(slot.placeholder, command, inkController or Game.GetPlayer())
+      return QuickHackIcons.PaintFor(slot.placeholder, command, inkSpawner or inkController or Game.GetPlayer())
     end)
     if okOld and redsOld == true then
       painted = true
@@ -616,10 +657,41 @@ local function adoptHost()
   end)
 end
 
+local function captureSpawner(this)
+  if this == nil then
+    return
+  end
+  inkSpawner = this
+  if not spawnerPrinted then
+    spawnerPrinted = true
+    local name = ""
+    pcall(function()
+      name = NameToString(this:GetClassName())
+    end)
+    if name == "" then
+      name = tostring(this)
+    end
+    print("QuickHack: icon spawner bound " .. name)
+  end
+end
+
+local function hookSpawner(className, method)
+  local ok, err = pcall(function()
+    ObserveAfter(className, method, captureSpawner)
+  end)
+  if not ok then
+    print("QuickHack: could not hook " .. className .. "." .. method .. ": " .. tostring(err))
+  end
+end
+
 function Hud.install()
   -- Do not Observe OnInitialize on HUD subclasses: CET errors with
   -- "Function OnInitialize in class ... does not exist" because the
-  -- method is defined on a parent. bindHud() polls the live controller.
+  -- method is defined on a parent. Hook OnPlayerAttach on controllers
+  -- whose widget libraries can spawn vanilla icon items.
+  hookSpawner("healthbarWidgetGameController", "OnPlayerAttach")
+  hookSpawner("gameuiHudHealthbarGameController", "OnPlayerAttach")
+  hookSpawner("MinimapContainerController", "OnPlayerAttach")
 end
 
 function Hud.invalidate()

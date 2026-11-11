@@ -89,21 +89,125 @@ local function applyStyle()
   end
 end
 
-local function titleOf(command)
-  local title = command.m_title
-  if title == nil or tostring(title) == "" then
-    title = command.m_titleAlternative
+local titlePrinted = false
+
+local function asText(value)
+  if value == nil then
+    return ""
   end
-  local text = title == nil and "quickhack" or tostring(title)
-  if string.sub(text, 1, 7) == "LocKey#" then
-    local ok, localized = pcall(function()
-      return GetLocalizedText(text)
-    end)
-    if ok and localized ~= nil and tostring(localized) ~= "" then
-      return tostring(localized)
-    end
+  if type(value) == "string" then
+    return value
+  end
+  local ok, text = pcall(function()
+    return tostring(value)
+  end)
+  if not ok or type(text) ~= "string" or text == "" or string.sub(text, 1, 8) == "userdata" then
+    return ""
   end
   return text
+end
+
+local function localize(text)
+  if text == nil or text == "" then
+    return ""
+  end
+  local ok, localized = pcall(function()
+    return GetLocalizedText(text)
+  end)
+  if ok then
+    local s = asText(localized)
+    if s ~= "" then
+      return s
+    end
+  end
+  if string.sub(text, 1, 7) == "LocKey#" then
+    local okKey, byKey = pcall(function()
+      return GetLocalizedTextByKey(CName.new(string.sub(text, 8)))
+    end)
+    if okKey then
+      local s = asText(byKey)
+      if s ~= "" then
+        return s
+      end
+    end
+    return ""
+  end
+  return text
+end
+
+local function titleOf(command)
+  if command == nil then
+    return "quickhack"
+  end
+  local okReds, reds = pcall(function()
+    return QuickHackIcons.TitleOf(command)
+  end)
+  if okReds then
+    local s = localize(asText(reds))
+    if s ~= "" then
+      if not titlePrinted then
+        titlePrinted = true
+        print("QuickHack: stream title " .. s)
+      end
+      return s
+    end
+  end
+  local fields = {
+    command.m_title,
+    command.title,
+    command.m_titleAlternative,
+    command.titleAlternative,
+  }
+  local i = 1
+  while i <= #fields do
+    local s = localize(asText(fields[i]))
+    if s ~= "" then
+      if not titlePrinted then
+        titlePrinted = true
+        print("QuickHack: stream title " .. s)
+      end
+      return s
+    end
+    i = i + 1
+  end
+  local okCat, cat = pcall(function()
+    local value = command.m_iconCategory
+    if value == nil then
+      value = command.iconCategory
+    end
+    if value == nil then
+      return ""
+    end
+    return NameToString(value)
+  end)
+  if okCat then
+    local s = asText(cat)
+    if s ~= "" and s ~= "None" then
+      if not titlePrinted then
+        titlePrinted = true
+        print("QuickHack: stream title " .. s)
+      end
+      return s
+    end
+  end
+  local okPart, part = pcall(function()
+    return QuickHackIcons.PartNameOf(command)
+  end)
+  if okPart then
+    local s = asText(part)
+    if s ~= "" and s ~= "None" then
+      if not titlePrinted then
+        titlePrinted = true
+        print("QuickHack: stream title " .. s)
+      end
+      return s
+    end
+  end
+  if not titlePrinted then
+    titlePrinted = true
+    print("QuickHack: stream title missing")
+  end
+  return "quickhack"
 end
 
 local writeScript
