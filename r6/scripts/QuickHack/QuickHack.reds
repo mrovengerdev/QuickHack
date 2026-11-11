@@ -285,6 +285,7 @@ public class QuickHackIcons extends IScriptable {
   public final static func PaintFor(image: wref<inkImage>, command: ref<QuickhackData>, owner: wref<IScriptable>) -> Bool {
     let record: wref<UIIcon_Record>;
     let iconRef: ref<UIIconReference>;
+    let controller: wref<inkGameController>;
     if !IsDefined(image) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
       return false;
     };
@@ -295,12 +296,18 @@ public class QuickHackIcons extends IScriptable {
     image.SetVisible(true);
     image.SetFitToContent(false);
     image.SetSize(new Vector2(56.00, 56.00));
+    image.SetActiveTextureType(inkTextureType.StaticTexture);
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
     iconRef = new UIIconReference();
     iconRef.iconID = command.m_icon;
     if IsDefined(owner) {
-      image.RequestSetImage(iconRef, owner);
+      controller = owner as inkGameController;
+      if IsDefined(controller) {
+        InkImageUtils.RequestSetImage(controller, image, command.m_icon);
+      } else {
+        image.RequestSetImage(iconRef, owner);
+      };
     } else {
       image.RequestSetImage(iconRef);
     };

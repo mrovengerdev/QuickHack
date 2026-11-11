@@ -28,6 +28,8 @@ local printedMany = false
 local imageErrorPrinted = false
 local partEmptyPrinted = false
 local partPrinted = false
+local inkController = nil
+local inkHost = nil
 
 local function screenX(widget)
   local ok, pos = pcall(function()
@@ -171,7 +173,7 @@ local function applyIcon(slot, command)
   end
   local painted = false
   local okPaint, redsPaint = pcall(function()
-    return QuickHackIcons.PaintFor(slot.placeholder, command, Game.GetPlayer())
+    return QuickHackIcons.PaintFor(slot.placeholder, command, inkController or Game.GetPlayer())
   end)
   if okPaint and redsPaint == true then
     painted = true
@@ -392,8 +394,9 @@ local function build()
   canvas:SetMargin(inkMargin.new({ left = 0.0, top = 0.0, right = 0.0, bottom = 128.0 }))
   canvas:SetSize(Vector2.new({ X = BAR_W, Y = BAR_H }))
   canvas:SetVisible(false)
-  canvas:Reparent(window, -1)
-  parent = window
+  local host = inkHost or window
+  canvas:Reparent(host, -1)
+  parent = host
 
   slots = {}
   local i = 1
@@ -427,11 +430,15 @@ local function build()
     end
 
     local icon = inkImage.new()
+    icon:SetName(CName.new("qhicon" .. tostring(i)))
     icon:SetAnchor(inkEAnchor.TopLeft)
     place(icon, x + 10, ICON_Y, ICON, ICON)
     icon:SetFitToContent(false)
     icon:SetTintColor(WHITE)
     icon:SetVisible(false)
+    pcall(function()
+      icon:SetActiveTextureType(inkTextureType.StaticTexture)
+    end)
     icon:Reparent(canvas, -1)
 
     local ramText = makeText(x, RAM_Y, SLOT_W, 16, 14, NUMBER_TINT, "")
@@ -456,7 +463,45 @@ local function build()
   return true
 end
 
+local function rememberHud(this, takeHost)
+  if this == nil then
+    return
+  end
+  if inkController == nil or takeHost then
+    inkController = this
+  end
+  if takeHost then
+    pcall(function()
+      inkHost = this:GetRootCompoundWidget()
+    end)
+  end
+end
+
+local function adoptHost()
+  if canvas == nil or inkHost == nil or parent == inkHost then
+    return
+  end
+  pcall(function()
+    if parent ~= nil then
+      parent:RemoveChild(canvas)
+    end
+    canvas:Reparent(inkHost, -1)
+    parent = inkHost
+  end)
+end
+
 function Hud.install()
+  pcall(function()
+    ObserveAfter("gameuiRootHudGameController", "OnInitialize", function(this)
+      rememberHud(this, true)
+      adoptHost()
+    end)
+  end)
+  pcall(function()
+    ObserveAfter("healthbarWidgetGameController", "OnInitialize", function(this)
+      rememberHud(this, false)
+    end)
+  end)
 end
 
 function Hud.invalidate()
@@ -478,6 +523,7 @@ function Hud.ensure()
     end
   end
   if built then
+    adoptHost()
     return
   end
   local ok, err = pcall(build)
