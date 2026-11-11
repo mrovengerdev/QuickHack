@@ -35,6 +35,7 @@ local hostPrinted = false
 local hostRetry = false
 local barHostPrinted = false
 local spawnPrinted = false
+local wrapPrinted = false
 local libPrinted = false
 local checkPrinted = false
 local spawnFailPrinted = false
@@ -437,6 +438,8 @@ local function paintRam(slot, command)
   local available = availableRam()
   local unaffordable = available ~= nil and cost > available
   gameTint(slot.ramText, unaffordable)
+  gameTint(slot.number, unaffordable)
+  gameTint(slot.title, unaffordable)
   slot.ramText:SetVisible(true)
   if slot.icon ~= nil and slot.iconKey ~= nil then
     local okTint, tinted = pcall(function()
@@ -661,7 +664,18 @@ local function build()
 
     local ramText = makeText(x, RAM_Y, SLOT_W, 16, 14, NUMBER_TINT, "")
     local number = makeText(x, NUMBER_Y, SLOT_W, 18, 18, NUMBER_TINT, tostring(i))
-    local title = makeText(x, TITLE_Y, SLOT_W, 14, 13, WHITE, "")
+    local title = makeText(x, TITLE_Y, SLOT_W, 30, 13, NUMBER_TINT, "")
+    pcall(function()
+      title:SetFitToContent(false)
+      title:SetVerticalAlignment(textVerticalAlignment.Top)
+    end)
+    local okWrap, wrapErr = pcall(function()
+      title:SetWrapping(true, SLOT_W)
+    end)
+    if not okWrap and not wrapPrinted then
+      wrapPrinted = true
+      print("QuickHack: title wrap failed " .. tostring(wrapErr))
+    end
     slots[i] = {
       placeholder = icon,
       icon = icon,

@@ -75,7 +75,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 63")
+  print("QuickHack ready build 64")
 end)
 
 registerForEvent("onOverlayOpen", function()
