@@ -1,73 +1,12 @@
 -- QuickHack stream script catalog. Loaded by stream.lua.
 -- All generators live inside create() so this file stays under Lua's local limit.
 local function create()
-  local COL = 54
-
-  local function pid()
-    return tostring(200 + math.random(0, 32700))
-  end
-
   local function mem()
     return string.format("0x%08X", math.random(0x10001000, 0x7FFFF000))
   end
 
   local function word()
     return string.format("%02X", math.random(0, 255))
-  end
-
-  local function pair()
-    return mem() .. " x " .. mem()
-  end
-
-  local function pad(s, width)
-    s = tostring(s or "")
-    if #s > width then
-      return string.sub(s, 1, width)
-    end
-    return s .. string.rep(" ", width - #s)
-  end
-
-  local function center(s, width)
-    s = tostring(s or "")
-    if #s >= width then
-      return string.sub(s, 1, width)
-    end
-    local left = math.floor((width - #s) / 2)
-    return string.rep(" ", left) .. s .. string.rep(" ", width - #s - left)
-  end
-
-  local function edge(ch)
-    return "+" .. string.rep(ch, COL - 2) .. "+"
-  end
-
-  local function box(inner)
-    return "|" .. pad(inner, COL - 2) .. "|"
-  end
-
-  local function fit(lines)
-    while #lines < 12 do
-      local at = #lines
-      local last = lines[#lines] or ""
-      local first = string.sub(last, 1, 1)
-      if first == "+" or first == "=" or string.find(last, "COMMIT", 1, true) or string.find(last, "panic", 1, true) then
-        at = #lines
-      end
-      if first == "|" then
-        table.insert(lines, at, box("  " .. pair()))
-      else
-        table.insert(lines, at, "  " .. pair() .. "  pid " .. pid())
-      end
-    end
-    if #lines > 16 then
-      local cut = {}
-      local i = 1
-      while i <= 16 do
-        cut[i] = lines[i]
-        i = i + 1
-      end
-      lines = cut
-    end
-    return lines
   end
 
   local function banner(title)
@@ -78,14 +17,98 @@ local function create()
     return name
   end
 
-  local function hexrow(base)
+  local function ms()
+    return tostring(math.random(400, 3600))
+  end
+
+  local function pad(s, width)
+    s = tostring(s or "")
+    if #s >= width then
+      return string.sub(s, 1, width)
+    end
+    return s .. string.rep(" ", width - #s)
+  end
+
+  local function bar(filled, width)
+    width = width or 16
+    if filled < 0 then
+      filled = 0
+    end
+    if filled > width then
+      filled = width
+    end
+    return "[" .. string.rep("#", filled) .. string.rep(".", width - filled) .. "]"
+  end
+
+  local function meter(name, filled, suffix, width)
+    return "    " .. pad(name, 5) .. " " .. bar(filled, width) .. "  " .. suffix
+  end
+
+  local function hexrow(base, zeros)
     local bytes = {}
     local i = 1
     while i <= 8 do
-      bytes[i] = word()
+      if zeros then
+        bytes[i] = "00"
+      else
+        bytes[i] = word()
+      end
       i = i + 1
     end
-    return "  " .. string.format("%08X", base) .. "  " .. table.concat(bytes, " ")
+    return "  " .. string.format("0x%06X", base) .. "  " .. table.concat(bytes, " ")
+  end
+
+  local function script(title, art, message, opts)
+    opts = opts or {}
+    local addr = opts.addr or mem()
+    local exitcode = opts.exit or "0"
+    local zeros = opts.zeros
+    local hexlines = opts.hexlines or 2
+    local base = opts.base or math.random(0x200000, 0xEFFFF0)
+    local lines = {
+      "  $ qh exec " .. banner(title) .. " --at " .. addr,
+      "  running...",
+    }
+    local i = 1
+    while i <= #art do
+      lines[#lines + 1] = art[i]
+      i = i + 1
+    end
+    lines[#lines + 1] = "  runtime      " .. ms() .. "ms"
+    lines[#lines + 1] = "  exit         " .. exitcode
+    lines[#lines + 1] = "  message      " .. message
+    local h = 0
+    while h < hexlines do
+      lines[#lines + 1] = hexrow(base + (h * 8), zeros)
+      h = h + 1
+    end
+    lines[#lines + 1] = "  $"
+    if #lines < 12 then
+      table.remove(lines, #lines)
+      while #lines < 11 do
+        lines[#lines + 1] = hexrow(base + ((#lines) * 8), zeros)
+      end
+      lines[#lines + 1] = "  $"
+    end
+    if #lines > 16 then
+      local cut = {}
+      local keep = #lines - 16
+      -- Drop extra art lines (starting at index 3) so the frame stays intact.
+      local skip = keep
+      local j = 1
+      local k = 1
+      while j <= #lines do
+        if skip > 0 and j >= 3 and j < (#lines - (3 + hexlines)) then
+          skip = skip - 1
+        else
+          cut[k] = lines[j]
+          k = k + 1
+        end
+        j = j + 1
+      end
+      lines = cut
+    end
+    return lines
   end
 
   local function familyOf(title)
@@ -168,1331 +191,477 @@ local function create()
     return "generic"
   end
 
-  local function dumpWipe(title)
-    local base = math.random(0x20000000, 0x6F000000)
-    return fit({
-      string.rep("=", COL),
-      "  >> MEMORY DUMP  " .. banner(title),
-      "  pid " .. pid() .. "  comm=wiped  sess " .. mem(),
-      string.rep("-", COL),
-      hexrow(base),
-      hexrow(base + 16),
-      hexrow(base + 32),
-      hexrow(base + 48),
-      hexrow(base + 64),
-      hexrow(base + 80),
-      "  munmap " .. string.format("%08X", base) .. ".." .. string.format("%08X", base + 0x1000),
-      "  pages zeroed  16  ok",
-      string.rep("=", COL),
-    })
-  end
-
-  local function panicWipe(title)
-    return fit({
-      "  * * *  KERNEL PANIC  * * *",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  vm_fault  page not present  at " .. mem(),
-      "  cr2=" .. mem() .. "  cr3=" .. mem(),
-      "  stack:",
-      "    [0] wipe_pages+0x4C     " .. mem(),
-      "    [1] do_munmap+0x18      " .. mem(),
-      "    [2] sys_memctl+0xA0     " .. mem(),
-      "    [3] irq_exit+0x0C       " .. mem(),
-      "  core dumped  " .. pair(),
-      "  ram image flushed  ok",
-      "  * * *  END PANIC  * * *",
-    })
-  end
-
-  local function mapsWipe(title)
-    local a = math.random(0x00400000, 0x00A00000)
-    return fit({
-      "  /proc/" .. pid() .. "/maps    " .. banner(title),
-      "  " .. string.format("%08X-%08X", a, a + 0x8C000) .. " r-x  [text]",
-      "  " .. string.format("%08X-%08X", a + 0x8C000, a + 0x9C000) .. " r--  [rodata]",
-      "  " .. string.format("%08X-%08X", a + 0x9C000, a + 0x120000) .. " rw-  [data]",
-      "  " .. mem() .. "-" .. mem() .. " rw-  [heap]",
-      "  " .. mem() .. "-" .. mem() .. " ---  [guard]",
-      "  " .. mem() .. "-" .. mem() .. " rw-  [stack]",
-      "  --- wipe ---",
-      "  munmap heap   ok  " .. mem(),
-      "  munmap stack  ok  " .. mem(),
-      "  pid " .. pid() .. "  address space empty",
-      "  COMMIT  memory wiped",
-    })
-  end
-
-  local function thermPanic(title)
-    local temp = 96 + math.random(0, 28)
-    return fit({
-      edge("="),
-      box("  THERMD  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  Tctl=" .. tostring(temp) .. "C  trip  critical"),
-      box("  fan pwm=255  still rising"),
-      box("  KERNEL PANIC @ " .. mem()),
-      box("    thermal_isr+0x22"),
-      box("    acctrip_halt+0x08"),
-      box("  " .. pair()),
-      box("  cpu0 offline  cpu1 offline"),
-      box("  STATUS  thermal shutdown"),
-      edge("="),
-    })
-  end
-
-  local function thermMsr(title)
-    return fit({
-      "  [msr]  " .. banner(title) .. "  pid " .. pid(),
-      "  rdmsr  0x1A2  IA32_THERM  = " .. mem(),
-      "  rdmsr  0x19C  THERM_STATUS = " .. mem(),
-      "  package trip  PROCHOT  asserted",
-      "  p-state  P0 -> Pmin  " .. mem(),
-      "  clk  4.20GHz -> 0.40GHz",
-      "  drop  irq " .. tostring(math.random(20, 80)) .. "%  packet loss " .. tostring(math.random(5, 40)) .. "%",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  wait  cooldown  3s",
-      "  COMMIT  rail hot  hold",
-      "  [msr]  end",
-    })
-  end
-
-  local function thermAcpi(title)
-    return fit({
-      "  ACPI  \\_TZ.CPU0  " .. banner(title),
-      "  pid " .. pid() .. "  ev  0x80  thermal",
-      "  sensor  0  " .. tostring(100 + math.random(0, 20)) .. "C  crit",
-      "  sensor  1  " .. tostring(90 + math.random(0, 20)) .. "C  warn",
-      "  _CRT exceeded  at " .. mem(),
-      "  +------------------------------+",
-      "  |   ##    ##    HEAT   ##    ## |",
-      "  |     ##      ##    ##      ##  |",
-      "  +------------------------------+",
-      "  KERNEL PANIC  ACPI halt",
-      "  " .. pair(),
-      "  COMMIT  trip logged",
-    })
-  end
-
-  local function busError(title)
-    return fit({
-      "  ***  BUS ERROR  SIGBUS  ***",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  addr " .. mem() .. "  align fault",
-      "  data  " .. word() .. " " .. word() .. " " .. word() .. " " .. word() .. "  bus 0",
-      "  irq storm  190k/s  cpu0",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  ecc  uncorrectable  3",
-      "  KERNEL PANIC  machine check",
-      "  mca bank0  " .. mem(),
-      "  rail  VCORE  collapse",
-      "  ***  END BUS ERROR  ***",
-    })
-  end
-
-  local function irqStorm(title)
-    return fit({
-      edge("+"),
-      box("  IRQ  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  irq  16  214882  storm"),
-      box("  irq  19  180221  storm"),
-      box("  apic  " .. mem() .. "  latched"),
-      box("  packet loss  " .. tostring(math.random(12, 67)) .. "%  nic0"),
-      box("  " .. pair()),
-      box("  short on bus  DAT[7:0]"),
-      box("  STATUS  circuit open"),
-      box("  COMMIT  line isolated"),
-      edge("+"),
-    })
-  end
-
-  local function railDrop(title)
-    return fit({
-      "  pmicd  " .. banner(title) .. "  pid " .. pid(),
-      "  VCORE   1.05 -> 0.11  fault",
-      "  VSOC   0.90 -> 0.00  fault",
-      "  i2c-0  nack  at " .. mem(),
-      "  KERNEL PANIC  undervolt",
-      "  " .. pair(),
-      "  gpio  PWR_OK  deassert",
-      "  watchdog  0  bark",
-      "  dump  " .. mem() .. "  4K",
-      "  Isolate rail  ok",
-      "  pid " .. pid() .. "  halted",
-      "  COMMIT  short cleared",
-    })
-  end
-
-  local function synPanic(title)
-    return fit({
-      "  * * *  KERNEL PANIC  * * *",
-      "  SYNAPSE  " .. banner(title) .. "  pid " .. pid(),
-      "  nmi  double fault  at " .. mem(),
-      "  ss  " .. mem() .. "  rsp " .. mem(),
-      "    [0] neur_fire+0x9E",
-      "    [1] chain_burn+0x14",
-      "    [2] irq_nmi+0x02",
-      "  packet loss  100%  link down",
-      "  " .. pair(),
-      "  core 2  fused  offline",
-      "  * * *  END PANIC  * * *",
-      "  COMMIT  synapse dead",
-    })
-  end
-
-  local function synFlood(title)
-    return fit({
-      edge("="),
-      box("  NEURAL  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  spike rate  40kHz -> 1.2MHz"),
-      box("  refractory  0ms  OVERFLOW"),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  kernel: synapse_q full"),
-      box("  drop  " .. tostring(math.random(200, 900)) .. "  frames"),
-      box("  STATUS  burnout"),
-      box("  COMMIT  pathway seared"),
-      edge("="),
-    })
-  end
-
-  local function synWatch(title)
-    return fit({
-      "  watchdog  " .. banner(title),
-      "  pid " .. pid() .. "  tick missed  8",
-      "  last  " .. mem() .. "  now " .. mem(),
-      "  feed  failed  timeout",
-      "  KERNEL PANIC  hard lock",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  reset vector  " .. mem(),
-      "  core dump  queued",
-      "  link  packet loss  92%",
-      "  halt  ok",
-      "  COMMIT  watchdog bite",
-    })
-  end
-
-  local function opticReset(title)
-    return fit({
-      "  fb0  " .. banner(title) .. "  pid " .. pid(),
-      "  ioctl  FBIOPUT_VSCREEN  " .. mem(),
-      "  modeset  fail  hang",
-      "  gpu  fence  timeout  3s",
-      "  KERNEL PANIC  ring stalled",
-      "  " .. pair(),
-      "  blank  ok  edid lost",
-      "  retry  1  no link",
-      "  retry  2  no link",
-      "  packet loss  100%  dsi",
-      "  STATUS  optics offline",
-      "  COMMIT  framebuffer reset",
-    })
-  end
-
-  local function opticCrc(title)
-    return fit({
-      edge("+"),
-      box("  VISION  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  crc  fail  " .. mem()),
-      box("  frame  0  drop"),
-      box("  frame  1  drop"),
-      box("  frame  2  drop"),
-      box("  " .. pair()),
-      box("  i2c  cam0  nack"),
-      box("  STATUS  pipeline halt"),
-      box("  COMMIT  reboot optics"),
-      edge("+"),
-    })
-  end
-
-  local function opticDma(title)
-    return fit({
-      "  dma  " .. banner(title) .. "  pid " .. pid(),
-      "  chan0  " .. mem() .. " -> " .. mem(),
-      "  desc  corrupt  " .. word() .. word(),
-      "  KERNEL PANIC  iommu fault",
-      "  iova  " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  unmap  fb  ok",
-      "  blackout  1",
-      "  pid " .. pid() .. "  stopped",
-      "  COMMIT  stream cut",
-      "  [dma]  end",
-    })
-  end
-
-  local function weaponDma(title)
-    return fit({
-      "  ***  DMA FAULT  ***",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  iommu  " .. mem() .. "  write violate",
-      "  dev  wpn0  bar0  " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  packet loss  " .. tostring(math.random(20, 80)) .. "%  fire-ctl",
-      "  KERNEL PANIC  uncorrectable",
-      "  isolate  device  ok",
-      "  trigger  inhibit  1",
-      "  ***  END DMA FAULT  ***",
-      "  COMMIT  glitch held",
-    })
-  end
-
-  local function weaponBus(title)
-    return fit({
-      edge("="),
-      box("  WPNCTL  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  can0  err  stuffbit"),
-      box("  can0  packet loss  " .. tostring(math.random(10, 60)) .. "%"),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  firmware  crc  mismatch"),
-      box("  safe  state  forced"),
-      box("  STATUS  actuator mute"),
-      box("  COMMIT  bus quiet"),
-      edge("="),
-    })
-  end
-
-  local function weaponIrq(title)
-    return fit({
-      "  irq  wpn  " .. banner(title) .. "  pid " .. pid(),
-      "  spurious  40012",
-      "  ack  fail  at " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  mask  irq  21  ok",
-      "  timeout  fire-loop",
-      "  KERNEL PANIC  skipped  recover",
-      "  pid " .. pid() .. "  yield",
-      "  lock  trigger  ok",
-      "  COMMIT  glitch sticky",
-      "  [irq]  end",
-    })
-  end
-
-  local function wareFw(title)
-    return fit({
-      "  fwupd  " .. banner(title) .. "  pid " .. pid(),
-      "  image  " .. mem() .. "  crc  BAD",
-      "  slot  A  dirty  slot  B  stale",
-      "  i2c-3  timeout  " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  rollback  fail",
-      "  KERNEL PANIC  bad capsule",
-      "  hold  reset  line",
-      "  packet loss  44%  mbus",
-      "  STATUS  cyberware fault",
-      "  COMMIT  module isolate",
-    })
-  end
-
-  local function wareI2c(title)
-    return fit({
-      edge("+"),
-      box("  MBUS  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  i2c  0x68  nack"),
-      box("  i2c  0x69  nack"),
-      box("  scl  stuck  low  " .. mem()),
-      box("  " .. pair()),
-      box("  recover  bus  fail"),
-      box("  STATUS  peripheral dead"),
-      box("  COMMIT  net offline"),
-      box("  packet loss  100%"),
-      edge("+"),
-    })
-  end
-
-  local function warePanic(title)
-    return fit({
-      "  * * *  KERNEL PANIC  * * *",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  oops: implant watchdog",
-      "  at " .. mem(),
-      "    [0] cw_tick+0x70",
-      "    [1] bio_isr+0x1C",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  submodule  offline  6",
-      "  * * *  END PANIC  * * *",
-      "  COMMIT  malfunction latched",
-      "  [oops]  end",
-    })
-  end
-
-  local function resetPanic(title)
-    return fit({
-      "  * * *  KERNEL PANIC  * * *",
-      "  " .. banner(title) .. "  pid " .. pid() .. "  init",
-      "  sysrq  b  immediate reboot",
-      "  sync  filesystems  skip",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  watchdog  bite  0",
-      "  reset  vector  " .. mem(),
-      "  pid 1  killed",
-      "  packet loss  100%",
-      "  * * *  REBOOTING  * * *",
-      "  COMMIT  system reset",
-    })
-  end
-
-  local function resetWatch(title)
-    return fit({
-      edge("="),
-      box("  INIT  " .. banner(title) .. "  pid 1"),
-      edge("-"),
-      box("  runlevel  0  going down"),
-      box("  sigterm  pid " .. pid()),
-      box("  sigterm  pid " .. pid()),
-      box("  " .. pair()),
-      box("  unmount  /  busy"),
-      box("  force  umount  ok"),
-      box("  STATUS  restart"),
-      box("  COMMIT  reboot armed"),
-      edge("="),
-    })
-  end
-
-  local function resetDump(title)
-    return fit({
-      "  kexec  " .. banner(title) .. "  pid " .. pid(),
-      "  load  " .. mem() .. "  len  0x2000",
-      "  shutdown  hooks  4",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  nmi  shootdown  cpus",
-      "  KERNEL PANIC  expected",
-      "  jump  " .. mem(),
-      "  boot  cpu0  spinning",
-      "  packet loss  link reset",
-      "  COMMIT  kexec go",
-      "  [kexec]  end",
-    })
-  end
-
-  local function killSig(title)
-    return fit({
-      "  ***  FATAL  SIGKILL  ***",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  sender  pid " .. pid() .. "  uid 0",
-      "  at " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  threads  12  reaped",
-      "  fds  closed  27",
-      "  KERNEL  process gone",
-      "  wait  zombie  0",
-      "  ***  END  ***",
-      "  COMMIT  target halted",
-    })
-  end
-
-  local function killInit(title)
-    return fit({
-      edge("+"),
-      box("  INIT  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  SIGTERM  ignored"),
-      box("  SIGKILL  delivered  " .. mem()),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  ns  teardown  ok"),
-      box("  STATUS  no process"),
-      box("  COMMIT  init released"),
-      box("  packet loss  100%"),
-      edge("+"),
-    })
-  end
-
-  local function killOops(title)
-    return fit({
-      "  oops:  " .. banner(title),
-      "  pid " .. pid() .. "  comm=target",
-      "  KERNEL PANIC  fatal exception",
-      "  rip  " .. mem() .. "  cs  0x10",
-      "    [0] do_exit+0x00",
-      "    [1] do_group_exit+0x24",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  core  not dumped",
-      "  parent  reaped  ok",
-      "  COMMIT  exit(137)",
-      "  [oops]  end",
-    })
-  end
-
-  local function fuseTimer(title)
-    return fit({
-      "  fused  " .. banner(title) .. "  pid " .. pid(),
-      "  gpio  ARM  assert  " .. mem(),
-      "  timer  3.00s  armed",
-      "  " .. pair(),
-      "  tick  2.00  ok",
-      "  tick  1.00  ok",
-      "  tick  0.00  fire",
-      "  irq  40  delivered",
-      "  packet  burst  ok",
-      "  " .. pair(),
-      "  STATUS  fuse spent",
-      "  COMMIT  detonate",
-    })
-  end
-
-  local function fuseCan(title)
-    return fit({
-      edge("="),
-      box("  CAN0  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  id  0x0C0  ARM"),
-      box("  id  0x0C1  FIRE  " .. mem()),
-      box("  " .. pair()),
-      box("  packet loss  0%  local"),
-      box("  ack  1  from " .. mem()),
-      box("  STATUS  payload out"),
-      box("  COMMIT  bus fired"),
-      box("  gpio  spent"),
-      edge("="),
-    })
-  end
-
-  local function fusePanic(title)
-    return fit({
-      "  * * *  KERNEL PANIC  * * *",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  oops:  gpio fire  " .. mem(),
-      "    [0] fuse_isr+0x10",
-      "    [1] handle_irq+0x44",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  expected  panic  hold",
-      "  * * *  END PANIC  * * *",
-      "  packet  sent  1",
-      "  COMMIT  charge gone",
-      "  [gpio]  end",
-    })
-  end
-
-  local function motorPid(title)
-    return fit({
-      "  pidctl  " .. banner(title) .. "  pid " .. pid(),
-      "  loop  P=" .. tostring(math.random(8, 40)) .. "  I=0  D=0",
-      "  setpoint  0  meas  " .. tostring(math.random(20, 90)),
-      "  pwm  clamp  0  " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  stall  detect  1",
-      "  encoder  lost  packet loss " .. tostring(math.random(15, 70)) .. "%",
-      "  safe  torque  off",
-      "  STATUS  gait freeze",
-      "  COMMIT  movement crippled",
-      "  [pidctl]  end",
-    })
-  end
-
-  local function motorBus(title)
-    return fit({
-      edge("+"),
-      box("  SERVO  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  can1  timeout  " .. mem()),
-      box("  packet loss  " .. tostring(math.random(20, 90)) .. "%"),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  brake  lock  on"),
-      box("  STATUS  actuators hold"),
-      box("  COMMIT  walk inhibit"),
-      box("  irq  27  masked"),
-      edge("+"),
-    })
-  end
-
-  local function motorPanic(title)
-    return fit({
-      "  KERNEL PANIC  motor isr",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  at " .. mem(),
-      "    [0] gait_tick+0x5A",
-      "    [1] pwm_isr+0x0E",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  joints  8  offline",
-      "  recover  skip",
-      "  STATUS  frozen",
-      "  COMMIT  limp mode",
-      "  [panic]  end",
-    })
-  end
-
-  local function pingIcmp(title)
-    local lost = math.random(2, 6)
-    local sent = 12
-    return fit({
-      "  PING  " .. banner(title) .. "  pid " .. pid(),
-      "  icmp  id=" .. string.format("0x%04X", math.random(0, 65535)) .. "  " .. mem(),
-      "  64 bytes  ttl=54  time=2 ms",
-      "  64 bytes  ttl=54  time=3 ms",
-      "  64 bytes  ttl=1   time=*  loss",
-      "  64 bytes  ttl=54  time=2 ms",
-      "  64 bytes  ttl=0   time=*  loss",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  ---  stats  ---",
-      "  " .. tostring(sent) .. " sent  " .. tostring(lost) .. " lost  " .. tostring(math.floor(lost * 100 / sent)) .. "% packet loss",
-      "  COMMIT  echo done",
-    })
-  end
-
-  local function pingTrace(title)
-    return fit({
-      "  traceroute  " .. banner(title) .. "  pid " .. pid(),
-      "   1  " .. mem() .. "  1 ms",
-      "   2  " .. mem() .. "  4 ms",
-      "   3  *  *  *  packet loss",
-      "   4  " .. mem() .. "  9 ms",
-      "   5  *  *  *  packet loss",
-      "   6  " .. mem() .. "  12 ms",
-      "  " .. pair(),
-      "  hop  3,5  dropped",
-      "  rtt  avg  8ms  loss  28%",
-      "  STATUS  path mapped",
-      "  COMMIT  trace end",
-    })
-  end
-
-  local function pingSock(title)
-    return fit({
-      edge("="),
-      box("  NETSTAT  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  udp  " .. mem() .. "  ESTAB"),
-      box("  udp  " .. mem() .. "  DROP"),
-      box("  " .. pair()),
-      box("  rx  errors  " .. tostring(math.random(10, 200))),
-      box("  packet loss  " .. tostring(math.random(5, 35)) .. "%"),
-      box("  STATUS  host reachable"),
-      box("  COMMIT  ping cached"),
-      box("  ttl  54"),
-      edge("="),
-    })
-  end
-
-  local function whistleUdp(title)
-    return fit({
-      "  beacon  " .. banner(title) .. "  pid " .. pid(),
-      "  udp  dst " .. mem() .. "  port 9",
-      "  payload  " .. word() .. word() .. word() .. word(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  send  8  datagrams",
-      "  packet loss  " .. tostring(math.random(0, 15)) .. "%",
-      "  ack  none  expected",
-      "  hop  flood  ok",
-      "  STATUS  whistle out",
-      "  COMMIT  broadcast",
-      "  [udp]  end",
-    })
-  end
-
-  local function whistleMesh(title)
-    return fit({
-      edge("+"),
-      box("  MESH  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  neigh  " .. mem() .. "  heard"),
-      box("  neigh  " .. mem() .. "  heard"),
-      box("  " .. pair()),
-      box("  ttl  4  hop"),
-      box("  packet loss  6%"),
-      box("  STATUS  lure armed"),
-      box("  COMMIT  beacon hold"),
-      box("  rssi  -41 dBm"),
-      edge("+"),
-    })
-  end
-
-  local function whistleRaw(title)
-    return fit({
-      "  raw  " .. banner(title) .. "  pid " .. pid(),
-      "  sock  AF_PACKET  " .. mem(),
-      "  frame  0  out  " .. mem(),
-      "  frame  1  out  " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  retry  0",
-      "  packet loss  2%",
-      "  STATUS  tone sent",
-      "  COMMIT  whistle done",
-      "  [raw]  end",
-      "  pid " .. pid() .. "  idle",
-    })
-  end
-
-  local function contagionSyn(title)
-    return fit({
-      "  * worm  " .. banner(title) .. "  pid " .. pid(),
-      "  syn  flood  " .. mem(),
-      "  syn  flood  " .. mem(),
-      "  syn  flood  " .. mem(),
-      "  " .. pair(),
-      "  sockets  4096  open",
-      "  packet loss  peer  " .. tostring(math.random(10, 50)) .. "%",
-      "  hop  2  infected",
-      "  hop  3  infected",
-      "  STATUS  spread ok",
-      "  COMMIT  contagion live",
-      "  [worm]  end",
-    })
-  end
-
-  local function contagionRoute(title)
-    return fit({
-      edge("="),
-      box("  ROUTE  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  add  " .. mem() .. "  via infect"),
-      box("  add  " .. mem() .. "  via infect"),
-      box("  " .. pair()),
-      box("  ttl  8  propagate"),
-      box("  packet loss  11%"),
-      box("  STATUS  mesh owned"),
-      box("  COMMIT  routes dirty"),
-      box("  pid " .. pid() .. "  spawn"),
-      edge("="),
-    })
-  end
-
-  local function contagionPanic(title)
-    return fit({
-      "  KERNEL PANIC  netfilter",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  hook  PRE  overrun  " .. mem(),
-      "    [0] nf_infect+0x66",
-      "    [1] ip_rcv+0x30",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  expected  skip  continue",
-      "  hosts  6  tagged",
-      "  packet loss  19%",
-      "  COMMIT  worm resident",
-      "  [nf]  end",
-    })
-  end
-
-  local function sonicIrq(title)
-    return fit({
-      "  audio  " .. banner(title) .. "  pid " .. pid(),
-      "  irq  22  underrun  " .. mem(),
-      "  buf  " .. mem() .. "  empty",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  sample  48k  force  192k",
-      "  clip  1  amp  max",
-      "  packet loss  0%  local",
-      "  STATUS  shock out",
-      "  COMMIT  codec held",
-      "  [pcm]  end",
-      "  pid " .. pid() .. "  drain",
-    })
-  end
-
-  local function sonicDma(title)
-    return fit({
-      edge("+"),
-      box("  PCM  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  dma  " .. mem() .. "  burst"),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  fifo  overflow  12"),
-      box("  KERNEL  warn  spike"),
-      box("  STATUS  tone locked"),
-      box("  COMMIT  sonic done"),
-      box("  irq  22  ack"),
-      edge("+"),
-    })
-  end
-
-  local function sonicPanic(title)
-    return fit({
-      "  * * *  KERNEL PANIC  * * *",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  oops:  codec  lockup  " .. mem(),
-      "    [0] snd_isr+0x2A",
-      "    [1] handle_irq+0x44",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  recover  replay  ok",
-      "  * * *  END PANIC  * * *",
-      "  packet loss  3%",
-      "  COMMIT  burst sent",
-      "  [snd]  end",
-    })
-  end
-
-  local function backupMesh(title)
-    return fit({
-      "  meshctl  " .. banner(title) .. "  pid " .. pid(),
-      "  req  BACKUP  to " .. mem(),
-      "  req  BACKUP  to " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  ack  1  rtt  8ms",
-      "  ack  2  rtt  11ms",
-      "  packet loss  " .. tostring(math.random(0, 20)) .. "%",
-      "  units  inbound  2",
-      "  STATUS  request out",
-      "  COMMIT  backup called",
-      "  [mesh]  end",
-    })
-  end
-
-  local function backupFlood(title)
-    return fit({
-      edge("="),
-      box("  FLOOD  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  udp  4096  burst  " .. mem()),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  hop  3  fanout"),
-      box("  packet loss  7%"),
-      box("  STATUS  alert sent"),
-      box("  COMMIT  net flooded"),
-      box("  ttl  6"),
-      edge("="),
-    })
-  end
-
-  local function backupRoute(title)
-    return fit({
-      "  route  " .. banner(title) .. "  pid " .. pid(),
-      "  add  default  via " .. mem(),
-      "  metric  1  prefsrc " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  neigh  solicited  4",
-      "  packet loss  4%",
-      "  STATUS  path open",
-      "  COMMIT  backup routed",
-      "  [rt]  end",
-      "  pid " .. pid() .. "  wait",
-      "  rtt  9ms",
-    })
-  end
-
-  local function cameraIoctl(title)
-    return fit({
-      "  v4l  " .. banner(title) .. "  pid " .. pid(),
-      "  ioctl  VIDIOC_STREAM  " .. mem(),
-      "  grab  on  fd  3",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  frame  0  " .. mem(),
-      "  frame  1  " .. mem(),
-      "  packet loss  1%  csi",
-      "  STATUS  feed owned",
-      "  COMMIT  camera hijack",
-      "  [v4l]  end",
-      "  pid " .. pid() .. "  stream",
-    })
-  end
-
-  local function cameraLink(title)
-    return fit({
-      edge("+"),
-      box("  CSI  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  link  up  " .. mem()),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  edid  ok  hijack"),
-      box("  packet loss  0%"),
-      box("  STATUS  lens owned"),
-      box("  COMMIT  control taken"),
-      box("  irq  18  hooked"),
-      edge("+"),
-    })
-  end
-
-  local function cameraPanic(title)
-    return fit({
-      "  KERNEL PANIC  skipped",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  oops:  soft  " .. mem(),
-      "    [0] cam_isr+0x16",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  recover  hook  ok",
-      "  stream  held",
-      "  packet loss  2%",
-      "  STATUS  still up",
-      "  COMMIT  camera live",
-      "  [cam]  end",
-    })
-  end
-
-  local function turretCtl(title)
-    return fit({
-      "  turretd  " .. banner(title) .. "  pid " .. pid(),
-      "  auth  token  " .. mem(),
-      "  take  axis  pan  tilt",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  fire-ctl  armed  0",
-      "  packet loss  3%  can0",
-      "  setpoint  hold",
-      "  STATUS  mount owned",
-      "  COMMIT  turret seized",
-      "  [turret]  end",
-      "  pid " .. pid() .. "  idle",
-    })
-  end
-
-  local function turretBus(title)
-    return fit({
-      edge("="),
-      box("  CAN0  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  id  0x200  CLAIM"),
-      box("  id  0x201  ACK  " .. mem()),
-      box("  " .. pair()),
-      box("  packet loss  5%"),
-      box("  STATUS  bus master"),
-      box("  COMMIT  mount locked"),
-      box("  irq  33  ours"),
-      box("  safeties  held"),
-      edge("="),
-    })
-  end
-
-  local function turretIrq(title)
-    return fit({
-      "  irq  " .. banner(title) .. "  pid " .. pid(),
-      "  hook  33  at " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  steal  ok",
-      "  old  isr  " .. mem(),
-      "  packet loss  1%",
-      "  STATUS  isr ours",
-      "  COMMIT  turret hook",
-      "  [irq]  end",
-      "  pid " .. pid() .. "  run",
-      "  ticks  40",
-    })
-  end
-
-  local function distractUdp(title)
-    return fit({
-      "  noise  " .. banner(title) .. "  pid " .. pid(),
-      "  udp  flood  " .. mem(),
-      "  udp  flood  " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  hops  2  bounce",
-      "  packet loss  " .. tostring(math.random(5, 25)) .. "%",
-      "  decoy  4  up",
-      "  STATUS  attention pulled",
-      "  COMMIT  distract live",
-      "  [noise]  end",
-      "  pid " .. pid() .. "  hold",
-    })
-  end
-
-  local function distractArp(title)
-    return fit({
-      edge("+"),
-      box("  ARP  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  who-has  " .. mem()),
-      box("  is-at    " .. mem()),
-      box("  " .. pair()),
-      box("  cache  poison  3"),
-      box("  packet loss  8%"),
-      box("  STATUS  lure set"),
-      box("  COMMIT  distract ok"),
-      box("  ttl  2"),
-      edge("+"),
-    })
-  end
-
-  local function distractBeacon(title)
-    return fit({
-      "  beacon  " .. banner(title) .. "  pid " .. pid(),
-      "  ssid  spoof  " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  interval  50ms",
-      "  packet loss  4%",
-      "  clients  2  pulled",
-      "  STATUS  decoy up",
-      "  COMMIT  distract hold",
-      "  [bcn]  end",
-      "  pid " .. pid() .. "  tick",
-      "  rssi  -50",
-    })
-  end
-
-  local function explodeBus(title)
-    return fit({
-      "  * * *  KERNEL PANIC  * * *",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  oops:  ecu  overcurrent  " .. mem(),
-      "    [0] cell_isr+0x08",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  pack  isolate  fail",
-      "  * * *  END PANIC  * * *",
-      "  packet loss  100%",
-      "  STATUS  energy release",
-      "  COMMIT  explode",
-      "  [ecu]  end",
-    })
-  end
-
-  local function explodeGpio(title)
-    return fit({
-      edge("="),
-      box("  GPIO  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  line  CHARGE  " .. mem()),
-      box("  line  FIRE    assert"),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  irq  40  fire"),
-      box("  STATUS  packed spent"),
-      box("  COMMIT  explode ok"),
-      box("  bus  dead"),
-      edge("="),
-    })
-  end
-
-  local function explodeCan(title)
-    return fit({
-      "  can0  " .. banner(title) .. "  pid " .. pid(),
-      "  id  0x7FF  KILL  " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  ack  none  bus-off",
-      "  packet loss  100%",
-      "  KERNEL PANIC  ecu gone",
-      "  " .. mem() .. "  silent",
-      "  STATUS  wreck",
-      "  COMMIT  explode sent",
-      "  [can]  end",
-      "  pid " .. pid() .. "  exit",
-    })
-  end
-
-  local function vehicleCan(title)
-    return fit({
-      "  ecu  " .. banner(title) .. "  pid " .. pid(),
-      "  can0  take  " .. mem(),
-      "  id  0x100  THROT  0",
-      "  id  0x101  BRAKE  1",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  packet loss  " .. tostring(math.random(0, 18)) .. "%",
-      "  STATUS  vehicle owned",
-      "  COMMIT  bus master",
-      "  [ecu]  end",
-      "  pid " .. pid() .. "  hold",
-      "  spd  0",
-    })
-  end
-
-  local function vehicleBrake(title)
-    return fit({
-      edge("+"),
-      box("  ABS  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  loop  lock  " .. mem()),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  pwm  100%  hold"),
-      box("  packet loss  2%"),
-      box("  STATUS  wheels locked"),
-      box("  COMMIT  brake forced"),
-      box("  can0  ok"),
-      edge("+"),
-    })
-  end
-
-  local function vehiclePanic(title)
-    return fit({
-      "  KERNEL PANIC  skipped",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  ecu  soft  reset  " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  recover  our  isr",
-      "  packet loss  9%",
-      "  throttle  clamp  0",
-      "  STATUS  drive cut",
-      "  COMMIT  hijack hold",
-      "  [ecu]  end",
-      "  pid " .. pid() .. "  run",
-    })
-  end
-
-  local function unlockAuth(title)
-    return fit({
-      "  authd  " .. banner(title) .. "  pid " .. pid(),
-      "  keyring  " .. mem() .. "  add",
-      "  pam  bypass  1",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  lock  state  1 -> 0",
-      "  gpio  BOLT  retract",
-      "  packet loss  0%",
-      "  STATUS  door open",
-      "  COMMIT  unlock ok",
-      "  [auth]  end",
-      "  pid " .. pid() .. "  done",
-    })
-  end
-
-  local function unlockNfc(title)
-    return fit({
-      edge("="),
-      box("  NFC  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  uid  " .. mem() .. "  clone"),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  crypto  skip"),
-      box("  packet loss  0%"),
-      box("  STATUS  latch free"),
-      box("  COMMIT  unlock"),
-      box("  field  on"),
-      edge("="),
-    })
-  end
-
-  local function unlockGpio(title)
-    return fit({
-      "  gpio  " .. banner(title) .. "  pid " .. pid(),
-      "  line  LOCK  deassert  " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  irq  14  edge",
-      "  debounce  ok",
-      "  packet loss  0%",
-      "  STATUS  open",
-      "  COMMIT  bolt pulled",
-      "  [gpio]  end",
-      "  pid " .. pid() .. "  idle",
-      "  state  0",
-    })
-  end
-
-  local function overloadRail(title)
-    return fit({
-      "  pmicd  " .. banner(title) .. "  pid " .. pid(),
-      "  VBUS  12.0 -> 18.4  over",
-      "  IBUS  " .. tostring(math.random(20, 80)) .. "A  trip",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  KERNEL PANIC  overcurrent",
-      "  at " .. mem(),
-      "  isol  fail",
-      "  packet loss  71%",
-      "  STATUS  rail blown",
-      "  COMMIT  overload",
-      "  [pmic]  end",
-    })
-  end
-
-  local function overloadIrq(title)
-    return fit({
-      edge("+"),
-      box("  PSU  " .. banner(title) .. "  pid " .. pid()),
-      edge("+"),
-      box("  irq  OC  " .. mem()),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  clamp  fail"),
-      box("  packet loss  54%"),
-      box("  STATUS  surge"),
-      box("  COMMIT  overload ok"),
-      box("  warn  thermal"),
-      edge("+"),
-    })
-  end
-
-  local function overloadPanic(title)
-    return fit({
-      "  * * *  KERNEL PANIC  * * *",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  oops:  psu  " .. mem(),
-      "    [0] oc_isr+0x04",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  * * *  END PANIC  * * *",
-      "  packet loss  88%",
-      "  STATUS  brownout",
-      "  COMMIT  overload latched",
-      "  [oops]  end",
-      "  pid " .. pid() .. "  dead",
-    })
-  end
-
-  local function controlTake(title)
-    return fit({
-      "  ctl  " .. banner(title) .. "  pid " .. pid(),
-      "  session  " .. mem() .. "  stolen",
-      "  old  pid " .. pid() .. "  kicked",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  tty  hijack  ok",
-      "  packet loss  1%",
-      "  STATUS  remote owned",
-      "  COMMIT  take control",
-      "  [ctl]  end",
-      "  pid " .. pid() .. "  master",
-      "  fd  0 1 2  ours",
-    })
-  end
-
-  local function controlNet(title)
-    return fit({
-      edge("="),
-      box("  RSH  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  bind  " .. mem() .. "  22"),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  auth  none"),
-      box("  packet loss  2%"),
-      box("  STATUS  shell open"),
-      box("  COMMIT  control held"),
-      box("  tty  raw"),
-      edge("="),
-    })
-  end
-
-  local function controlIrq(title)
-    return fit({
-      "  irq  hook  " .. banner(title),
-      "  pid " .. pid() .. "  vec " .. mem(),
-      "  " .. pair(),
-      "  " .. pair(),
-      "  steal  isr  ok",
-      "  packet loss  0%",
-      "  STATUS  input ours",
-      "  COMMIT  remote bind",
-      "  [irq]  end",
-      "  pid " .. pid() .. "  run",
-      "  ticks  12",
-      "  ack  1",
-    })
-  end
-
-  local function genericPanic(title)
-    return fit({
-      "  * * *  KERNEL PANIC  * * *",
-      "  " .. banner(title) .. "  pid " .. pid(),
-      "  oops:  at " .. mem(),
-      "    [0] sys_enter+0x3C",
-      "    [1] irq_exit+0x0C",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  cr2=" .. mem(),
-      "  packet loss  " .. tostring(math.random(10, 90)) .. "%",
-      "  * * *  END PANIC  * * *",
-      "  COMMIT  exec ok",
-      "  [oops]  end",
-    })
-  end
-
-  local function genericNet(title)
-    return fit({
-      "  netd  " .. banner(title) .. "  pid " .. pid(),
-      "  sock  " .. mem() .. "  connect",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  rx  " .. tostring(math.random(100, 900)) .. "  tx  " .. tostring(math.random(100, 900)),
-      "  packet loss  " .. tostring(math.random(2, 40)) .. "%",
-      "  rtt  " .. tostring(math.random(1, 20)) .. "ms",
-      "  drop  " .. tostring(math.random(0, 30)),
-      "  STATUS  link dirty",
-      "  COMMIT  run done",
-      "  [net]  end",
-      "  pid " .. pid() .. "  idle",
-    })
-  end
-
-  local function genericHex(title)
-    return fit({
-      edge("="),
-      box("  EXEC  " .. banner(title) .. "  pid " .. pid()),
-      edge("-"),
-      box("  ip  " .. mem()),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  " .. pair()),
-      box("  packet loss  " .. tostring(math.random(0, 25)) .. "%"),
-      box("  STATUS  committed"),
-      box("  COMMIT  ok"),
-      box("  sess  " .. mem()),
-      edge("="),
-    })
-  end
-
-  local function genericIrq(title)
-    return fit({
-      "  irq  " .. banner(title) .. "  pid " .. pid(),
-      "  vec  " .. mem() .. "  fire",
-      "  " .. pair(),
-      "  " .. pair(),
-      "  ack  1  " .. mem(),
-      "  packet loss  " .. tostring(math.random(0, 20)) .. "%",
-      "  tick  4  ok",
-      "  STATUS  handled",
-      "  COMMIT  irq done",
-      "  [irq]  end",
-      "  pid " .. pid() .. "  yield",
-      "  ip  " .. mem(),
-    })
-  end
-
-  local CATALOG = {
-    memorywipe = { dumpWipe, panicWipe, mapsWipe },
-    overheat = { thermPanic, thermMsr, thermAcpi },
-    shortcircuit = { busError, irqStorm, railDrop },
-    synapse = { synPanic, synFlood, synWatch },
-    rebootoptics = { opticReset, opticCrc, opticDma },
-    weaponglitch = { weaponDma, weaponBus, weaponIrq },
-    cyberware = { wareFw, wareI2c, warePanic },
-    systemreset = { resetPanic, resetWatch, resetDump },
-    suicide = { killSig, killInit, killOops },
-    detonate = { fuseTimer, fuseCan, fusePanic },
-    cripple = { motorPid, motorBus, motorPanic },
-    ping = { pingIcmp, pingTrace, pingSock },
-    whistle = { whistleUdp, whistleMesh, whistleRaw },
-    contagion = { contagionSyn, contagionRoute, contagionPanic },
-    sonic = { sonicIrq, sonicDma, sonicPanic },
-    backup = { backupMesh, backupFlood, backupRoute },
-    camera = { cameraIoctl, cameraLink, cameraPanic },
-    turret = { turretCtl, turretBus, turretIrq },
-    distract = { distractUdp, distractArp, distractBeacon },
-    explode = { explodeBus, explodeGpio, explodeCan },
-    vehicle = { vehicleCan, vehicleBrake, vehiclePanic },
-    unlock = { unlockAuth, unlockNfc, unlockGpio },
-    overload = { overloadRail, overloadIrq, overloadPanic },
-    control = { controlTake, controlNet, controlIrq },
-    generic = { genericPanic, genericNet, genericHex, genericIrq },
-  }
+  local CATALOG = {}
+
+  local function add(family, fn)
+    local list = CATALOG[family]
+    if list == nil then
+      list = {}
+      CATALOG[family] = list
+    end
+    list[#list + 1] = fn
+  end
+
+  add("memorywipe", function(title)
+    return script(title, {
+      meter("mem", 0, "0K"),
+      meter("wipe", 16, "100%"),
+    }, "TARGET MEMORY EMPTIED", { zeros = true, hexlines = 4 })
+  end)
+
+  add("memorywipe", function(title)
+    return script(title, {
+      "    page  0  " .. bar(0) .. "  EMPTY",
+      "    page  1  " .. bar(0) .. "  EMPTY",
+      "    page  2  " .. bar(0) .. "  EMPTY",
+      "    page  3  " .. bar(0) .. "  EMPTY",
+      meter("free", 16, "100%"),
+    }, "ALL PAGES ZEROED", { zeros = true, hexlines = 4 })
+  end)
+
+  add("overheat", function(title)
+    return script(title, {
+      meter("fan", 0, "OFF"),
+      meter("temp", 16, tostring(math.random(120, 148)) .. "C  WARNING"),
+      meter("rail", 14, "TRIP"),
+      meter("pwr", 15, "1.21V"),
+      meter("loss", math.random(2, 5), tostring(math.random(12, 28)) .. "%"),
+    }, "FAN HALTED - TEMP WARNING")
+  end)
+
+  add("overheat", function(title)
+    local temp = tostring(math.random(124, 148))
+    return script(title, {
+      meter("fan", 0, "OFF"),
+      "    tmp     40 |",
+      "            80 |########",
+      "           " .. temp .. " |################",
+      "                  WARNING",
+      "    rail  TRIP",
+    }, "FAN OFF - THERMAL WARNING")
+  end)
+
+  add("shortcircuit", function(title)
+    return script(title, {
+      "    vbus  13.8V  ##############",
+      "    vbus   0.1V  #",
+      meter("amp", 16, "FAULT"),
+      "    spark *  *    * *     *",
+    }, "BUS FAULT LATCHED")
+  end)
+
+  add("shortcircuit", function(title)
+    return script(title, {
+      "    rail  VCC ---x--- GND",
+      "              SHORT",
+      meter("i", 16, "48A"),
+      meter("prot", 0, "BLOWN"),
+    }, "RAIL COLLAPSED TO GROUND")
+  end)
+
+  add("synapse", function(title)
+    return script(title, {
+      "    sig   /\\_/\\    /\\_/\\",
+      "          \\   \\_/\\/    \\_",
+      meter("thr", 16, "MAX"),
+      meter("lock", 16, "SEIZE"),
+    }, "SYNAPTIC LOCK SEIZED")
+  end)
+
+  add("synapse", function(title)
+    return script(title, {
+      "    spike |      *",
+      "          |     * *",
+      "          | *  *   *  *",
+      "          |* *       *",
+      meter("thr", 16, "MAX"),
+    }, "NEURAL SPIKE SATURATED")
+  end)
+
+  add("rebootoptics", function(title)
+    return script(title, {
+      "    vis   +----------------+",
+      "          |##########      |",
+      "          |    ##########  |",
+      "          |        ######  |",
+      "          +----------------+",
+      meter("sync", 0, "LOST"),
+    }, "OPTICS REBOOT ISSUED")
+  end)
+
+  add("rebootoptics", function(title)
+    return script(title, {
+      meter("vis", 0, "BLACK"),
+      "    scan  ====  ====  ====",
+      "          ----  ----  ----",
+      meter("link", 0, "DOWN"),
+      meter("boot", 16, "RESTART"),
+    }, "OPTIC BUS RESTARTED")
+  end)
+
+  add("weaponglitch", function(title)
+    return script(title, {
+      "    fire  [>               ]  JAM",
+      "    ammo  [? ? ? ?         ]",
+      "    bolt  [####----####----]  DESYNC",
+    }, "FIRING CYCLE DESYNCED")
+  end)
+
+  add("weaponglitch", function(title)
+    return script(title, {
+      "    cyl   [##] [  ] [##] [  ]",
+      meter("feed", 0, "STUCK"),
+      meter("safe", 16, "ON"),
+      "    fire  --------x--------",
+    }, "FEED JAMMED - SAFE FORCED")
+  end)
+
+  add("cyberware", function(title)
+    return script(title, {
+      meter("fw", 0, "BRICK"),
+      "    i2c   * --x-- * --x-- *",
+      meter("nlink", 16, "SEIZE"),
+    }, "CYBERWARE BUS SEIZED")
+  end)
+
+  add("cyberware", function(title)
+    return script(title, {
+      "    impl  CORE --x-- LIMB",
+      meter("ctl", 16, "OVERRIDE"),
+      meter("ack", 0, "NONE"),
+      meter("loop", 16, "OPEN"),
+    }, "IMPLANT CONTROL OVERRIDDEN")
+  end)
+
+  add("systemreset", function(title)
+    return script(title, {
+      meter("cpu0", 0, "HALT"),
+      meter("cpu1", 0, "HALT"),
+      meter("svc", 0, "DOWN"),
+      "    boot  [            *   ]  WAIT",
+    }, "SYSTEM RESET COMMITTED")
+  end)
+
+  add("systemreset", function(title)
+    return script(title, {
+      "    run   * * * * * * * *",
+      "    halt  x x x x x x x x",
+      meter("init", 0, "REAPED"),
+      meter("fs", 0, "UNMOUNTED"),
+    }, "ALL SERVICES HALTED")
+  end)
+
+  add("suicide", function(title)
+    return script(title, {
+      meter("proc", 16, "TERM"),
+      meter("wd", 16, "FORCE"),
+      "    init  reaped",
+      meter("life", 0, "STOP"),
+    }, "PROCESS FORCE-HALTED")
+  end)
+
+  add("suicide", function(title)
+    return script(title, {
+      "    pid   [##########------]  KILL",
+      "    tree  init",
+      "            +-- target  x",
+      "            +-- child   x",
+      meter("sig", 16, "TERM"),
+    }, "WATCHDOG REAPED TARGET")
+  end)
+
+  add("detonate", function(title)
+    return script(title, {
+      "    t-3   " .. bar(4),
+      "    t-2   " .. bar(8),
+      "    t-1   " .. bar(12),
+      "    t-0   " .. bar(16) .. "  FIRE",
+    }, "FUSE COMPLETE - FIRE")
+  end)
+
+  add("detonate", function(title)
+    return script(title, {
+      meter("fuse", 16, "0.0s"),
+      "    arm   *  *  *  *  *  *",
+      meter("cap", 16, "MAX"),
+    }, "CHARGE RELEASED")
+  end)
+
+  add("cripple", function(title)
+    return script(title, {
+      meter("Lhip", 0, "LOCK"),
+      meter("Lkn", 0, "LOCK"),
+      meter("Rhip", 0, "LOCK"),
+      meter("Rkn", 0, "LOCK"),
+      "    gait  -- x -- x -- x --",
+    }, "MOTORS LOCKED")
+  end)
+
+  add("cripple", function(title)
+    return script(title, {
+      "    step  L --x-- R --x-- L",
+      meter("drv", 0, "CUT"),
+      meter("bal", 0, "LOST"),
+      meter("hold", 16, "RIGID"),
+    }, "MOVEMENT DRIVE CUT")
+  end)
+
+  add("ping", function(title)
+    return script(title, {
+      "    hop 1  " .. mem() .. "  [####]  " .. tostring(math.random(1, 3)) .. "ms",
+      "    hop 2  " .. mem() .. "  [####]  " .. tostring(math.random(3, 6)) .. "ms",
+      "    hop 3  " .. mem() .. "  [####]  " .. tostring(math.random(6, 9)) .. "ms",
+      "    hop 4  " .. mem() .. "  [*]     ttl",
+      meter("loss", 0, "0%"),
+    }, "HOST REACHED - 4 HOPS")
+  end)
+
+  add("ping", function(title)
+    return script(title, {
+      "      * -- * -- * -- *",
+      "                |",
+      "              (you)",
+      "    rtt   2ms  5ms  8ms  11ms",
+      meter("loss", 0, "0%"),
+    }, "ECHO PATH MAPPED")
+  end)
+
+  add("whistle", function(title)
+    return script(title, {
+      "    call  ~    ~    ~    ~",
+      "         ~  ~    ~    ~",
+      meter("rng", 14, "WIDE"),
+      "    ack   " .. tostring(math.random(4, 9)) .. "  NODES",
+    }, "BEACON BROADCAST")
+  end)
+
+  add("whistle", function(title)
+    return script(title, {
+      "    tone  /\\    /\\    /\\",
+      "          \\/    \\/    \\/",
+      meter("tx", 16, "MAX"),
+      meter("hear", 16, "LOCK"),
+    }, "ATTRACT SIGNAL LOCKED")
+  end)
+
+  add("contagion", function(title)
+    return script(title, {
+      "        A *----* B",
+      "          |      |",
+      "        C *----* D",
+      meter("spread", 16, "100%"),
+      "    hosts  4 / 4  INFECTED",
+    }, "PAYLOAD PROPAGATED")
+  end)
+
+  add("contagion", function(title)
+    return script(title, {
+      "    seed  * -- * -- * -- *",
+      "                |",
+      "                * -- *",
+      meter("spread", 16, "100%"),
+      "    hosts  6 / 6  INFECTED",
+    }, "ALL NODES INFECTED")
+  end)
+
+  add("sonic", function(title)
+    return script(title, {
+      "     2k  ##",
+      "     4k  ######",
+      "     8k  ##############",
+      "    16k  ################",
+      meter("hz", 16, "PEAK"),
+    }, "SONIC PEAK COMMITTED")
+  end)
+
+  add("sonic", function(title)
+    return script(title, {
+      "    wav   /\\/\\/\\/\\/\\/\\/\\/\\",
+      "          \\/\\/\\/\\/\\/\\/\\/\\/",
+      meter("spl", 16, "MAX"),
+      meter("ear", 16, "OVER"),
+    }, "AUDIO PATH OVERDRIVEN")
+  end)
+
+  add("backup", function(title)
+    return script(title, {
+      "    node  * <-- * <-- *",
+      "              ^",
+      "              *",
+      meter("link", 16, "UP"),
+      "    units 3 / 3  ARRIVED",
+    }, "BACKUP UNITS LINKED")
+  end)
+
+  add("backup", function(title)
+    return script(title, {
+      meter("call", 16, "SENT"),
+      "    u1    [################]  HERE",
+      "    u2    [################]  HERE",
+      "    u3    [################]  HERE",
+    }, "REINFORCEMENT ARRIVED")
+  end)
+
+  add("camera", function(title)
+    return script(title, {
+      "    feed  +----------------+",
+      "          |  NO SIGNAL     |",
+      "          |  ############  |",
+      "          +----------------+",
+      meter("link", 0, "DOWN"),
+    }, "CAMERA FEED DROPPED")
+  end)
+
+  add("camera", function(title)
+    return script(title, {
+      "    cam0  [XXXXXXXXXXXXXXXX]  DEAD",
+      "    cam1  [XXXXXXXXXXXXXXXX]  DEAD",
+      "    cam2  [XXXXXXXXXXXXXXXX]  DEAD",
+      meter("link", 0, "DOWN"),
+    }, "ALL CAMERAS BLANKED")
+  end)
+
+  add("turret", function(title)
+    return script(title, {
+      "          \\       /",
+      "            \\   /",
+      "          --- + ---",
+      "            /   \\",
+      "          /       \\",
+      meter("aim", 16, "LOCK"),
+    }, "TURRET AIM OVERRIDDEN")
+  end)
+
+  add("turret", function(title)
+    return script(title, {
+      "    yaw   <---------*----->",
+      meter("arc", 16, "SWEEP"),
+      meter("fire", 16, "AUTO"),
+      meter("iff", 0, "OFF"),
+    }, "IFF DISABLED - AUTO FIRE")
+  end)
+
+  add("distract", function(title)
+    return script(title, {
+      "    decoy *     *     *",
+      "       *     *     *",
+      meter("noise", 16, "MAX"),
+    }, "DECOY BURST SENT")
+  end)
+
+  add("distract", function(title)
+    return script(title, {
+      "    blip  .  *  .  *  .  *",
+      "          *  .  *  .  *  .",
+      meter("att", 16, "PULLED"),
+      meter("src", 0, "HIDDEN"),
+    }, "ATTENTION PULLED AWAY")
+  end)
+
+  add("explode", function(title)
+    return script(title, {
+      meter("pres", 16, "RUPTURE"),
+      "     (  *  *  *  *  *  )",
+      "      ( * * * * * * * )",
+      meter("cap", 16, "DUMP"),
+    }, "PRESSURE VESSEL RUPTURED")
+  end)
+
+  add("explode", function(title)
+    return script(title, {
+      "    cell  [####] [####] [####]",
+      "          boom   boom   boom",
+      meter("arm", 16, "HOT"),
+      meter("out", 16, "OPEN"),
+    }, "CELLS DUMPED")
+  end)
+
+  add("vehicle", function(title)
+    return script(title, {
+      meter("spd", 12, "87"),
+      meter("brake", 0, "CUT"),
+      meter("thr", 16, "MAX"),
+      meter("steer", 4, "LOCK"),
+    }, "BRAKES CUT - STEER LOCKED")
+  end)
+
+  add("vehicle", function(title)
+    return script(title, {
+      "    can   ECU --x-- BRK",
+      "            '--x-- STR",
+      meter("ctl", 16, "TAKE"),
+      meter("hand", 0, "LOST"),
+    }, "VEHICLE BUS HIJACKED")
+  end)
+
+  add("unlock", function(title)
+    return script(title, {
+      meter("auth", 16, "OK"),
+      "    latch [..........>>>>>>]  OPEN",
+      "    door  [ ]====  ]",
+    }, "LATCH RELEASED")
+  end)
+
+  add("unlock", function(title)
+    return script(title, {
+      "    pin   * * * *  ACCEPTED",
+      meter("bolt", 0, "CLEAR"),
+      meter("mag", 0, "OFF"),
+      meter("door", 16, "OPEN"),
+    }, "LOCK CLEARED - DOOR OPEN")
+  end)
+
+  add("overload", function(title)
+    return script(title, {
+      meter("railA", 16, "WARNING"),
+      meter("railB", 16, "WARNING"),
+      meter("draw", 16, "240%"),
+      meter("prot", 0, "BYPASS"),
+    }, "POWER RAILS OVERLOADED")
+  end)
+
+  add("overload", function(title)
+    return script(title, {
+      "    grid  *====*====*",
+      "          ||   ||   ||",
+      "          *====*====*",
+      meter("load", 16, "MAX"),
+      meter("brk", 0, "OPEN"),
+    }, "GRID LOAD AT MAXIMUM")
+  end)
+
+  add("control", function(title)
+    return script(title, {
+      "    user  [local] --x--> [remote]",
+      meter("sess", 16, "TAKEN"),
+      meter("ctl", 16, "OWN"),
+    }, "SESSION TAKEN")
+  end)
+
+  add("control", function(title)
+    return script(title, {
+      "    pipe  src ==== dst",
+      "                attached",
+      meter("own", 16, "REMOTE"),
+      meter("loc", 0, "CUT"),
+    }, "REMOTE PIPE ATTACHED")
+  end)
+
+  add("generic", function(title)
+    return script(title, {
+      meter("job", 16, "DONE"),
+      meter("buf", 12, "76%"),
+      meter("loss", math.random(0, 3), tostring(math.random(0, 8)) .. "%"),
+    }, "EXECUTION COMPLETE")
+  end)
+
+  add("generic", function(title)
+    return script(title, {
+      "    path  * -- * -- * -- *",
+      meter("ok", 16, "PASS"),
+      meter("ret", 16, "0x00"),
+    }, "TARGET ROUTINE RETURNED")
+  end)
 
   local function write(title)
     local family = familyOf(title)
