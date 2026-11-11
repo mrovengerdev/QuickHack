@@ -6,7 +6,7 @@ local LEFT = 36
 local TOP = 150
 local WIDTH = 640
 local CHARS_PER_SEC = 92
-local DONE_SCROLL_PX_PER_SEC = 46
+local SCROLL_PX_PER_SEC = 18
 local CFG = "bin/x64/plugins/cyber_engine_tweaks/mods/QuickHack/stream.cfg"
 
 local color = { r = 0.3686, g = 0.9647, b = 1.1888 }
@@ -114,19 +114,6 @@ local function randomIp()
   return string.format("10.%d.%d.%d", octet(), octet(), octet())
 end
 
-local function addr()
-  local hex = "0123456789ABCDEF"
-  local top = math.random(1, 15)
-  local out = "0x" .. string.sub(hex, top + 1, top + 1)
-  local i = 1
-  while i <= 7 do
-    local n = math.random(0, 15)
-    out = out .. string.sub(hex, n + 1, n + 1)
-    i = i + 1
-  end
-  return out
-end
-
 local function pingLines(count)
   local ip = randomIp()
   local lines = {
@@ -159,21 +146,15 @@ local function overheatLines(title, target)
   }
 end
 
-local function handshakeLines(title)
-  local lines = {
+local function genericLines(title)
+  return {
     "> exec " .. title,
     "open session",
     "inject " .. title,
+    "handshake ................ ok",
+    "write payload",
+    "> " .. title .. " committed",
   }
-  local i = 1
-  while i <= 6 do
-    lines[#lines + 1] = addr() .. " x " .. addr()
-    i = i + 1
-  end
-  lines[#lines + 1] = "handshake ................ ok"
-  lines[#lines + 1] = "write payload"
-  lines[#lines + 1] = "> " .. title .. " committed"
-  return lines
 end
 
 local function scriptFor(command)
@@ -190,10 +171,8 @@ local function scriptFor(command)
   if string.find(action, "overheat", 1, true) or string.find(folded, "overheat", 1, true) then
     return overheatLines(title, target)
   end
-  return handshakeLines(title)
+  return genericLines(title)
 end
-
-
 
 local function ensure()
   if canvas ~= nil then
@@ -244,21 +223,16 @@ end
 
 local queue = {}
 
-local function departJobs()
-  local i = 1
-  while i <= #jobs do
-    jobs[i].depart = true
-    i = i + 1
-  end
-end
-
 function Stream.push(command)
   if command == nil then
     return
   end
   local lines = scriptFor(command)
-  departJobs()
-  active = { lines = lines, index = 1 }
+  if active == nil then
+    active = { lines = lines, index = 1 }
+    return
+  end
+  queue[#queue + 1] = lines
 end
 
 local function placeRows()
@@ -313,10 +287,13 @@ function Stream.tick(dt)
   if step < 1 then
     step = 1
   end
+  if active == nil and #queue > 0 then
+    active = { lines = table.remove(queue, 1), index = 1 }
+  end
   if active ~= nil then
     local line = active.lines[active.index]
     local current = jobs[#jobs]
-    if current == nil or current.text ~= line or current.depart == true then
+    if current == nil or current.text ~= line then
       pushLine(line)
       current = jobs[#jobs]
     end
@@ -331,9 +308,8 @@ function Stream.tick(dt)
   end
   local i = 1
   while i <= #jobs do
-    local job = jobs[i]
-    if active == nil or job.depart == true then
-      job.y = job.y - DONE_SCROLL_PX_PER_SEC * dt
+    if active == nil or jobs[i] ~= jobs[#jobs] or jobs[i].shown >= #jobs[i].text then
+      jobs[i].y = jobs[i].y - SCROLL_PX_PER_SEC * dt
     end
     i = i + 1
   end
@@ -358,34 +334,42 @@ function Stream.drawSettings()
     end
     return value, false
   end
-  local flags = ImGuiWindowFlags.AlwaysAutoResize
-  if ImGuiWindowFlags.NoMove ~= nil then
-    flags = flags + ImGuiWindowFlags.NoMove
-  end
-  ImGui.Begin("QuickHack stream", flags)
+  ImGui.SetNextWindowSize(360, 180, ImGuiCond.FirstUseEver)
+  ImGui.Begin("QuickHack stream", ImGuiWindowFlags.AlwaysAutoResize)
   ImGui.Text("Left-side code color and opacity")
   local changed = false
-  local function clicked(label)
-    local pressed, extra = ImGui.Button(label, 88, 28)
-    return pressed == true or extra == true
-  end
-  if clicked("Red") then
-    color.r, color.g, color.b = 1, 0, 0
+  local nr, rOk = slider("Red", color.r, 0.0, 1.5)
+  if rOk then
+    color.r = nr
     changed = true
   end
-  ImGui.SameLine()
-  if clicked("Green") then
-    color.r, color.g, color.b = 0, 1, 0
+  local ng, gOk = slider("Green", color.g, 0.0, 1.5)
+  if gOk then
+    color.g = ng
     changed = true
   end
-  ImGui.SameLine()
-  if clicked("Blue") then
-    color.r, color.g, color.b = 0, 0, 1
+  local nb, bOk = slider("Blue", color.b, 0.0, 1.5)
+  if bOk then
+    color.b = nb
     changed = true
   end
   local na, aOk = slider("Opacity", opacity, 0.15, 1.0)
   if aOk then
     opacity = na
+    changed = true
+  end
+  if ImGui.Button("Cyan") then
+    color.r, color.g, color.b = 0.3686, 0.9647, 1.1888
+    changed = true
+  end
+  ImGui.SameLine()
+  if ImGui.Button("Green") then
+    color.r, color.g, color.b = 0.35, 1.0, 0.45
+    changed = true
+  end
+  ImGui.SameLine()
+  if ImGui.Button("Amber") then
+    color.r, color.g, color.b = 1.0, 0.72, 0.25
     changed = true
   end
   if changed then
@@ -412,9 +396,6 @@ function Stream.destroy()
   active = nil
 end
 
-math.randomseed(os.time())
-math.random()
-math.random()
 loadCfg()
 
 return Stream
