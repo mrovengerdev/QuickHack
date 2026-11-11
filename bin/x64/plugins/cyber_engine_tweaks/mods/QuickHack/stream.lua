@@ -5,8 +5,8 @@ local LINE_H = 22
 local LEFT = 36
 local TOP = 150
 local WIDTH = 640
-local CHARS_PER_SEC = 92
-local SCROLL_PX_PER_SEC = 18
+local CHUNK_SECONDS = 1.20
+local SCROLL_PX_PER_SEC = 46
 local CFG = "bin/x64/plugins/cyber_engine_tweaks/mods/QuickHack/stream.cfg"
 
 local color = { r = 0.3686, g = 0.9647, b = 1.1888 }
@@ -114,9 +114,14 @@ local function randomIp()
   return string.format("10.%d.%d.%d", octet(), octet(), octet())
 end
 
+local function addr()
+  return string.format("0x%08X", math.random(0, 0x7FFFFFFF))
+end
+
 local function pingLines(count)
   local ip = randomIp()
   local lines = {
+    "> exec quickhack",
     "> ping " .. ip,
     "PING " .. ip .. " (" .. ip .. "): 56 data bytes",
   }
@@ -127,33 +132,44 @@ local function pingLines(count)
     i = i + 1
   end
   lines[#lines + 1] = "> nslookup " .. ip
+  lines[#lines + 1] = "mem[" .. addr() .. "] = A"
   lines[#lines + 1] = "Name:    subnet-node"
   lines[#lines + 1] = "Address: " .. ip
+  lines[#lines + 1] = "CONNECTION ACCEPTED"
+  lines[#lines + 1] = "HTTP/1.1 200 OK"
   lines[#lines + 1] = string.format("--- %d packets transmitted, %d received, 0%% packet loss", count, count)
   return lines
 end
 
 local function overheatLines(title, target)
   return {
+    "> exec quickhack",
     "> ddos --target " .. target .. " --vector heat",
-    "opening 4096 sockets",
+    "socket[" .. addr() .. "] = SYN",
+    "mem[" .. addr() .. "] ^= 0xA35C91D2",
     "syn flood ................ ok",
-    "connection table overflow",
-    "thermal governor bypassed",
+    "tbl[" .. addr() .. "] overflow",
+    "CONNECTION ACCEPTED",
+    "HTTP/1.1 200 OK",
+    "gov[" .. addr() .. "] bypass",
     "core temp 41C -> 118C",
-    "coolant_loop killed",
+    "pid[" .. addr() .. "] coolant_loop killed",
     "> " .. title .. " committed",
   }
 end
 
 local function genericLines(title)
+  local ip = randomIp()
   return {
-    "> exec " .. title,
-    "open session",
-    "inject " .. title,
-    "handshake ................ ok",
-    "write payload",
-    "> " .. title .. " committed",
+    "> exec quickhack",
+    "POST /daemon/" .. title .. " HTTP/1.1",
+    "Host: " .. ip,
+    "mem[" .. addr() .. "] = " .. addr(),
+    "xor " .. addr() .. " " .. addr(),
+    "jmp " .. addr(),
+    "CONNECTION ACCEPTED",
+    "HTTP/1.1 200 OK",
+    "> commit " .. title,
   }
 end
 
@@ -223,13 +239,26 @@ end
 
 local queue = {}
 
+local function scriptRate(lines)
+  local total = 0
+  local i = 1
+  while i <= #lines do
+    total = total + #lines[i]
+    i = i + 1
+  end
+  if total < 1 then
+    total = 1
+  end
+  return total / CHUNK_SECONDS
+end
+
 function Stream.push(command)
   if command == nil then
     return
   end
   local lines = scriptFor(command)
   if active == nil then
-    active = { lines = lines, index = 1 }
+    active = { lines = lines, index = 1, rate = scriptRate(lines) }
     return
   end
   queue[#queue + 1] = lines
@@ -283,12 +312,16 @@ function Stream.tick(dt)
   if dt > 0.05 then
     dt = 0.05
   end
-  local step = math.floor(CHARS_PER_SEC * dt)
-  if step < 1 then
-    step = 1
-  end
   if active == nil and #queue > 0 then
-    active = { lines = table.remove(queue, 1), index = 1 }
+    local lines = table.remove(queue, 1)
+    active = { lines = lines, index = 1, rate = scriptRate(lines) }
+  end
+  local step = 1
+  if active ~= nil and active.rate ~= nil then
+    step = math.floor(active.rate * dt)
+    if step < 1 then
+      step = 1
+    end
   end
   if active ~= nil then
     local line = active.lines[active.index]
@@ -320,7 +353,8 @@ function Stream.tick(dt)
 end
 
 function Stream.drawSettings()
-  if ImGui == nil then
+  local Cast = require("cast")
+  if ImGui == nil or Cast.isOverlay() ~= true then
     return
   end
   local function slider(label, value, low, high)
@@ -357,18 +391,18 @@ function Stream.drawSettings()
     opacity = na
     changed = true
   end
-  if ImGui.Button("Cyan") then
-    color.r, color.g, color.b = 0.3686, 0.9647, 1.1888
+  if ImGui.Button("Red") then
+    color.r, color.g, color.b = 1.0, 0.16, 0.16
+    changed = true
+  end
+  ImGui.SameLine()
+  if ImGui.Button("Blue") then
+    color.r, color.g, color.b = 0.22, 0.48, 1.0
     changed = true
   end
   ImGui.SameLine()
   if ImGui.Button("Green") then
-    color.r, color.g, color.b = 0.35, 1.0, 0.45
-    changed = true
-  end
-  ImGui.SameLine()
-  if ImGui.Button("Amber") then
-    color.r, color.g, color.b = 1.0, 0.72, 0.25
+    color.r, color.g, color.b = 0.20, 1.0, 0.32
     changed = true
   end
   if changed then

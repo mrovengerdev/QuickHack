@@ -351,6 +351,22 @@ local function noteOffCone()
   end
 end
 
+local rayArmed = false
+local aimPrinted = false
+local awayPrinted = false
+local suppressedKey = nil
+
+local function facingDot(entity)
+  local player = Game.GetPlayer()
+  local ok, dot = pcall(function()
+    return QuickHackAim.Facing(player, entity)
+  end)
+  if not ok or type(dot) ~= "number" or dot <= -1.5 then
+    return nil
+  end
+  return dot
+end
+
 local function crosshairAny()
   local player = Game.GetPlayer()
   if not isDefined(player) then
@@ -384,10 +400,30 @@ function Target.onHoverId(value)
   local crossKind = kindOf(cross)
   if crossKind == "device" or crossKind == "vehicle" then
     local deviceKey = entityIdKey(cross)
-    if deviceKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
-      return
+    local dot = facingDot(cross)
+    if dot ~= nil and dot >= 0.2 then
+      rayArmed = true
+      suppressedKey = nil
+      if not aimPrinted then
+        aimPrinted = true
+        print(string.format("QuickHack: aim dot=%.2f", dot))
+      end
+    elseif dot ~= nil and not aimPrinted then
+      aimPrinted = true
+      print(string.format("QuickHack: aim dot=%.2f unarmed", dot))
     end
-    if showEntity(cross, deviceKey) then
+    if rayArmed and dot ~= nil and dot < 0 then
+      suppressedKey = deviceKey
+      if not awayPrinted then
+        awayPrinted = true
+        print(string.format("QuickHack: look-away dot=%.2f", dot))
+      end
+      clearAll()
+    elseif deviceKey == suppressedKey and (dot == nil or dot < 0.2) then
+      clearAll()
+    elseif deviceKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
+      return
+    elseif showEntity(cross, deviceKey) then
       return
     end
   elseif kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle" then
