@@ -1506,4 +1506,4 @@ local function create()
   return write
 end
 
-return create()
+return { write = create() }

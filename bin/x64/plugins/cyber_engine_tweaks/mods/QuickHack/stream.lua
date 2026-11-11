@@ -108,18 +108,57 @@ end
 
 local writeScript
 do
+  local function asWriter(ok, result)
+    if not ok then
+      return nil
+    end
+    if type(result) == "function" then
+      return result
+    end
+    if type(result) == "table" and type(result.write) == "function" then
+      return result.write
+    end
+    return nil
+  end
+
+  local errors = {}
   local ok, result = pcall(require, "stream_scripts")
-  if ok and type(result) == "function" then
-    writeScript = result
-  else
-    print("QuickHack: stream scripts failed: " .. tostring(result))
+  writeScript = asWriter(ok, result)
+  if writeScript == nil then
+    errors[#errors + 1] = "require: " .. tostring(ok) .. " " .. type(result) .. " " .. tostring(result)
+    local paths = {
+      "stream_scripts.lua",
+      "bin/x64/plugins/cyber_engine_tweaks/mods/QuickHack/stream_scripts.lua",
+    }
+    local i = 1
+    while i <= #paths and writeScript == nil do
+      local path = paths[i]
+      local loader, loadErr = loadfile(path)
+      if loader ~= nil then
+        local ran, value = pcall(loader)
+        writeScript = asWriter(ran, value)
+        if writeScript == nil then
+          errors[#errors + 1] = path .. ": " .. tostring(ran) .. " " .. type(value) .. " " .. tostring(value)
+        end
+      else
+        errors[#errors + 1] = path .. " missing: " .. tostring(loadErr)
+      end
+      i = i + 1
+    end
+  end
+
+  if writeScript == nil then
+    local detail = table.concat(errors, " | ")
+    print("QuickHack: stream scripts failed: " .. detail)
     writeScript = function(title)
       return {
         "  :: QUICKHACK / STREAM",
-        "  catalog failed: " .. tostring(result),
+        "  catalog failed: " .. detail,
         "  " .. tostring(title or ""),
       }
     end
+  else
+    print("QuickHack: stream scripts loaded")
   end
 end
 
