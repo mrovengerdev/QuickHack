@@ -35,6 +35,7 @@ local hostPrinted = false
 local hostRetry = false
 local barHostPrinted = false
 local spawnPrinted = false
+local libPrinted = false
 local spawnFailPrinted = false
 local inkSpawner = nil
 local spawnerPrinted = false
@@ -213,18 +214,34 @@ local function applyIcon(slot, command)
     return
   end
   local painted = false
-  local okCW, redsCW = pcall(function()
-    return QuickHackIcons.SpawnCodewareSlot(canvas, command, slot.index, slot.x + 10, ICON_Y, ICON, inkController or inkSpawner)
+  local libCtrl = inkController or inkSpawner
+  local okLib, libReason = pcall(function()
+    return QuickHackIcons.LibraryReason(libCtrl, canvas, command, slot.index, slot.x + 10, ICON_Y, ICON)
   end)
-  if okCW and redsCW == true then
+  if not okLib then
+    libReason = "error " .. tostring(libReason)
+  end
+  if libReason == "ok" then
     painted = true
-    if not spawnPrinted then
+  end
+  if not libPrinted then
+    libPrinted = true
+    print("QuickHack: slot library spawn " .. tostring(libReason))
+  end
+  if not painted then
+    local okCW, redsCW = pcall(function()
+      return QuickHackIcons.SpawnCodewareSlot(canvas, command, slot.index, slot.x + 10, ICON_Y, ICON, inkController or inkSpawner)
+    end)
+    if okCW and redsCW == true then
+      painted = true
+      if not spawnPrinted then
+        spawnPrinted = true
+        print("QuickHack: icon spawned with Codeware component")
+      end
+    elseif okCW ~= true and not spawnPrinted then
       spawnPrinted = true
-      print("QuickHack: icon spawned with Codeware")
+      print("QuickHack: Codeware icon spawn error: " .. tostring(redsCW))
     end
-  elseif okCW ~= true and not spawnPrinted then
-    spawnPrinted = true
-    print("QuickHack: Codeware icon spawn error: " .. tostring(redsCW))
   end
   local spawner = inkSpawner or inkController
   if not painted and spawner ~= nil then

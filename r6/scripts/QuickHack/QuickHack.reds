@@ -599,6 +599,22 @@ public class QuickHackIcons extends IScriptable {
     return true;
   }
 
+  public final static func LibraryReason(controller: wref<inkGameController>, parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float) -> String {
+    if !IsDefined(controller) {
+      return "no-controller";
+    };
+    if !IsDefined(parent) {
+      return "no-parent";
+    };
+    if !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return "no-icon-id";
+    };
+    if QuickHackIcons.TrySpawnOwned(controller, parent, r"quickhack\\hud\\slot.inkwidget", n"Slot", command, slot, x, y, size) {
+      return "ok";
+    };
+    return "spawn-nil";
+  }
+
   public final static func SpawnSlot(controller: wref<inkGameController>, parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float) -> Bool {
     if !IsDefined(controller) || !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
       return false;
