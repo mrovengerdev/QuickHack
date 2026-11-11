@@ -5,7 +5,7 @@ local LINE_H = 22
 local LEFT = 36
 local TOP = 150
 local WIDTH = 640
-local HACK_FALLBACK = 0.50
+local HACK_SECONDS = 1.00
 local SCROLL_PX_PER_SEC = 46
 local CFG = "bin/x64/plugins/cyber_engine_tweaks/mods/QuickHack/stream.cfg"
 
@@ -193,16 +193,8 @@ local function scriptFor(command)
   return handshakeLines(title)
 end
 
-local function hackSeconds(command)
-  if command ~= nil and command.m_action ~= nil then
-    local ok, time = pcall(function()
-      return command.m_action:GetActivationTime()
-    end)
-    if ok and type(time) == "number" and time >= 0.15 and time <= 8 then
-      return time
-    end
-  end
-  return HACK_FALLBACK
+local function hackSeconds()
+  return HACK_SECONDS
 end
 
 local function ensure()
@@ -280,15 +272,11 @@ function Stream.push(command)
     return
   end
   local lines = scriptFor(command)
-  local seconds = hackSeconds(command)
   departJobs()
-  queue = {}
   active = {
     lines = lines,
     index = 1,
-    rate = measure(lines) / seconds,
-    speed = ((#lines + LINES) * LINE_H) / seconds,
-    deadline = os.clock() + seconds,
+    rate = measure(lines) / hackSeconds(),
   }
 end
 
@@ -340,20 +328,6 @@ function Stream.tick(dt)
   if dt > 0.05 then
     dt = 0.05
   end
-  if active ~= nil and os.clock() >= active.deadline then
-    departJobs()
-    active = nil
-  end
-  if active == nil and #queue > 0 then
-    local lines = table.remove(queue, 1)
-    active = {
-      lines = lines,
-      index = 1,
-      rate = measure(lines) / HACK_FALLBACK,
-      speed = ((#lines + LINES) * LINE_H) / HACK_FALLBACK,
-      deadline = os.clock() + HACK_FALLBACK,
-    }
-  end
   local step = 1
   if active ~= nil and active.rate ~= nil then
     step = math.floor(active.rate * dt)
@@ -373,7 +347,6 @@ function Stream.tick(dt)
       current.shown = #line
       active.index = active.index + 1
       if active.index > #active.lines then
-        departJobs()
         active = nil
       end
     end
@@ -382,9 +355,7 @@ function Stream.tick(dt)
   while i <= #jobs do
     local job = jobs[i]
     if job.depart == true then
-      job.y = job.y - ((LINES * LINE_H) / 0.08) * dt
-    elseif active ~= nil and job ~= jobs[#jobs] then
-      job.y = job.y - active.speed * dt
+      job.y = job.y - SCROLL_PX_PER_SEC * dt
     end
     i = i + 1
   end
