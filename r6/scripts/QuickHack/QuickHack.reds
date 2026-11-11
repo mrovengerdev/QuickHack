@@ -163,30 +163,21 @@ public class QuickHackAim extends IScriptable {
 
 
 public class QuickHackIcons extends IScriptable {
-  public final static func IconRecord(command: ref<QuickhackData>) -> wref<UIIcon_Record> {
-    let record: wref<UIIcon_Record>;
-    if !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return null;
-    };
-    record = TweakDBInterface.GetUIIconRecord(command.m_icon);
-    if IsDefined(record) {
-      return record;
-    };
-    return null;
-  }
-
   public final static func DebugOf(command: ref<QuickhackData>) -> String {
-    let record: wref<UIIcon_Record> = QuickHackIcons.IconRecord(command);
+    let path: String;
+    let part: String;
     if !IsDefined(command) {
       return "no-command";
     };
     if !TDBID.IsValid(command.m_icon) {
       return "icon-id-invalid";
     };
-    if !IsDefined(record) {
+    path = QuickHackIcons.AtlasPath(command.m_icon);
+    part = QuickHackIcons.PartName(command.m_icon);
+    if StrLen(path) == 0 {
       return "no-uiicon-record";
     };
-    return ResRef.ToString(record.AtlasResourcePath()) + " part=" + NameToString(record.AtlasPartName());
+    return path + " part=" + part;
   }
 
   public final static func AtlasPath(iconID: TweakDBID) -> String {
@@ -242,6 +233,7 @@ public class QuickHackIcons extends IScriptable {
     let canvas: ref<inkCanvas>;
     let image: ref<inkImage>;
     let record: wref<UIIcon_Record>;
+    let iconRef: ref<UIIconReference>;
     let margin: inkMargin;
     let canvasName: CName;
     let imageName: CName;
@@ -280,7 +272,9 @@ public class QuickHackIcons extends IScriptable {
     image.Reparent(canvas, -1);
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
-    InkImageUtils.RequestSetImage(null, image, command.m_icon);
+    iconRef = new UIIconReference();
+    iconRef.iconID = command.m_icon;
+    image.RequestSetImage(iconRef);
     return true;
   }
 
@@ -289,8 +283,13 @@ public class QuickHackIcons extends IScriptable {
   }
 
   public final static func PaintFor(image: wref<inkImage>, command: ref<QuickhackData>, owner: wref<IScriptable>) -> Bool {
-    let record: wref<UIIcon_Record> = QuickHackIcons.IconRecord(command);
-    if !IsDefined(image) || !IsDefined(record) {
+    let record: wref<UIIcon_Record>;
+    let iconRef: ref<UIIconReference>;
+    if !IsDefined(image) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return false;
+    };
+    record = TweakDBInterface.GetUIIconRecord(command.m_icon);
+    if !IsDefined(record) {
       return false;
     };
     image.SetVisible(true);
@@ -298,8 +297,12 @@ public class QuickHackIcons extends IScriptable {
     image.SetSize(new Vector2(56.00, 56.00));
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
-    if IsDefined(owner) && TDBID.IsValid(command.m_icon) {
-      InkImageUtils.RequestSetImage(owner, image, command.m_icon);
+    iconRef = new UIIconReference();
+    iconRef.iconID = command.m_icon;
+    if IsDefined(owner) {
+      image.RequestSetImage(iconRef, owner);
+    } else {
+      image.RequestSetImage(iconRef);
     };
     return true;
   }
