@@ -5,7 +5,9 @@ local LINE_H = 22
 local LEFT = 36
 local TOP = 150
 local WIDTH = 640
-local CHARS_PER_SEC = 92
+local CHARS_PER_SEC = 800
+local MIN_CPS = 80
+local MAX_CPS = 2500
 local SCROLL_PX_PER_SEC = 18
 local CFG = "bin/x64/plugins/cyber_engine_tweaks/mods/QuickHack/stream.cfg"
 
@@ -44,7 +46,7 @@ local function loadCfg()
   end
   local text = file:read("*a")
   file:close()
-  local r, g, b, a = string.match(text or "", "([%d%.]+)%s+([%d%.]+)%s+([%d%.]+)%s+([%d%.]+)")
+  local r, g, b, a, s = string.match(text or "", "([%d%.]+)%s+([%d%.]+)%s+([%d%.]+)%s+([%d%.]+)%s*([%d%.]*)")
   if r == nil then
     return
   end
@@ -52,6 +54,9 @@ local function loadCfg()
   color.g = clamp(tonumber(g) or color.g, 0, 1.5)
   color.b = clamp(tonumber(b) or color.b, 0, 1.5)
   opacity = clamp(tonumber(a) or opacity, 0.15, 1)
+  if s ~= nil and s ~= "" then
+    CHARS_PER_SEC = clamp(tonumber(s) or CHARS_PER_SEC, MIN_CPS, MAX_CPS)
+  end
 end
 
 local function saveCfg()
@@ -59,7 +64,7 @@ local function saveCfg()
   if file == nil then
     return
   end
-  file:write(string.format("%.4f %.4f %.4f %.4f\n", color.r, color.g, color.b, opacity))
+  file:write(string.format("%.4f %.4f %.4f %.4f %.1f\n", color.r, color.g, color.b, opacity, CHARS_PER_SEC))
   file:close()
 end
 
@@ -134,632 +139,773 @@ local function has(text, token)
   return string.find(text, token, 1, true) ~= nil
 end
 
+local function hex()
+  return string.format("[0x%X]", math.random(0x10000, 0xFFFFFF))
+end
+
+local function pair()
+  return hex() .. " x " .. hex()
+end
+
+local function pairLine(count)
+  local parts = {}
+  local i = 1
+  while i <= count do
+    parts[i] = pair()
+    i = i + 1
+  end
+  return table.concat(parts, "  ")
+end
+
+local function wrap(text, width)
+  width = width or 74
+  local lines = {}
+  local cur = ""
+  for word in string.gmatch(text, "%S+") do
+    if cur == "" then
+      cur = word
+    elseif #cur + 1 + #word <= width then
+      cur = cur .. " " .. word
+    else
+      lines[#lines + 1] = cur
+      cur = word
+    end
+  end
+  if cur ~= "" then
+    lines[#lines + 1] = cur
+  end
+  return lines
+end
+
+local function pushAll(dst, src)
+  local i = 1
+  while i <= #src do
+    dst[#dst + 1] = src[i]
+    i = i + 1
+  end
+end
+
+local function makeScript(header, paragraphs, closer)
+  local lines = { "> " .. header }
+  local p = 1
+  while p <= #paragraphs do
+    pushAll(lines, wrap(paragraphs[p]))
+    lines[#lines + 1] = pairLine(3)
+    lines[#lines + 1] = pairLine(3)
+    if p == #paragraphs then
+      lines[#lines + 1] = pairLine(2)
+    end
+    p = p + 1
+  end
+  if closer ~= nil and closer ~= "" then
+    lines[#lines + 1] = closer
+  end
+  return lines
+end
+
 local function pingVariants()
   local ip = randomIp()
   return {
-    {
-      "> ping -f " .. ip,
-      "PING " .. ip .. " (" .. ip .. "): 56 data bytes",
-      string.format("64 bytes from %s: icmp_seq=1 ttl=54 time=9.2 ms", ip),
-      string.format("64 bytes from %s: icmp_seq=2 ttl=54 time=8.7 ms", ip),
-      "flooding ................ ok",
-      "1000 packets/s",
-      "icmp_seq overflow",
-      string.format("--- %s ping statistics ---", ip),
-      "4096 packets transmitted, 4096 received, 0% packet loss",
-    },
-    {
-      "> traceroute " .. ip,
-      "traceroute to subnet-node (" .. ip .. "), 16 hops max",
-      " 1  gateway (" .. randomIp() .. ")  1.4 ms",
-      " 2  edge-fw (" .. randomIp() .. ")  4.8 ms",
-      " 3  subnet-node (" .. ip .. ")  9.1 ms",
-      "> nslookup " .. ip,
-      "Name:    subnet-node",
-      "Address: " .. ip,
-      "trace complete",
-    },
-    {
-      "> nmap -sS " .. ip,
-      "Starting Nmap 7.94",
-      "Host is up (0.0091s latency).",
-      "PORT     STATE SERVICE",
-      "22/tcp   open  ssh",
-      "443/tcp  open  https",
-      "6148/tcp open  net-access",
-      "MAC Address: " .. string.format("%02X:%02X:%02X:%02X:%02X:%02X", math.random(16, 255), octet(), octet(), octet(), octet(), octet()),
-      "Nmap done: 1 IP address (1 host up)",
-    },
+    makeScript(
+      "flood --dst " .. ip .. " --vec ICMP --rate MAX",
+      {
+        "Interface n0 is armed and the echo ring is pinned. Replies arrive faster than the netstack can retire them, so the sequence window wraps and the host table stays hot.",
+        "Latency collapses to noise. The path is marked LIVE and the flood keeps the node answering until the probe buffer is full.",
+        "Route cache now holds only this endpoint. Remaining hops are evicted so the scan can finish without dropping the lock.",
+      },
+      "flood complete  host=" .. ip
+    ),
+    makeScript(
+      "trace --dst " .. ip .. " --hops 16 --probe CLK",
+      {
+        "Hop fabric is walked in order. Each gate answers with a timing stamp and a bind token so the path can be rebuilt without a second pass.",
+        "Edge firewall yields. The final hop resolves to this node and the trace table is written into the session map.",
+        "Name record is cached. Further packets skip discovery and write straight into the open channel.",
+      },
+      "trace complete  host=" .. ip
+    ),
+    makeScript(
+      "scan --dst " .. ip .. " --ports NET --mode STEALTH",
+      {
+        "Port bitmap is walked under a silent clock. Open services answer with a stub header only; closed ports are noted and skipped.",
+        "Access face is up. The net-access socket is marked reachable and the session key is stored for the next write.",
+        "Scan ledger is sealed. One host is up and the route remains bound for follow-on execution.",
+      },
+      "scan complete  host=" .. ip
+    ),
   }
 end
 
 local function overheatVariants(title, target)
   return {
-    {
-      "> ddos --target " .. target .. " --vector heat",
-      "opening 4096 sockets",
-      "syn flood ................ ok",
-      "connection table overflow",
-      "thermal governor bypassed",
-      "core temp 41C -> 118C",
-      "coolant_loop killed",
-      committed(title),
-    },
-    {
-      "> fork --bomb --target " .. target,
-      "pid " .. pid() .. " exec /bin/forkbomb",
-      "[fork] spawning worker 0",
-      "[fork] spawning worker 1",
-      "[fork] spawning worker " .. tostring(math.random(200, 900)),
-      "E: process table full",
-      "sched: runqueue jammed",
-      "thermal trip at 121C",
-      committed(title),
-    },
-    {
-      "> sysctl -w kernel.cpu.turbo=unsafe",
-      "unlocking turbo_override on " .. target,
-      "clock 3.20 GHz -> 6.80 GHz",
-      "warning: Tjmax exceeded",
-      "msr[" .. addr() .. "] = 0xDEAD",
-      "throttle watchdog disabled",
-      "core temp 44C -> 126C",
-      committed(title),
-    },
+    makeScript(
+      "flood --svc thermald --dst " .. target .. " --vec SYN",
+      {
+        "Thermal governor reports the core fabric is unregulated. Incoming datagrams pin the packet ring while the coolant loop loses its lock and the heat table is marked dirty.",
+        "The socket table overflows and coolant_pump is evicted from the run queue. Tjmax trip is armed and the clock is held in an unsafe burst.",
+        "Heat-sink telemetry is dropped. Remaining workers keep the fabric saturated so the node cannot bleed temperature back to nominal.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "fork --bomb --dst " .. target .. " --workers MAX",
+      {
+        "Process table is filled from a single parent. Each child clones itself before the scheduler can reclaim a slot, and the run queue jams.",
+        "Worker tokens collide. The thermal trip fires as idle time falls to zero and the core can no longer retire heat.",
+        "Spawn storm holds. No new task is admitted until the fabric is released, which this payload does not do.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "clock --dst " .. target .. " --turbo UNSAFE --hold",
+      {
+        "Turbo override is unlocked and the multiplier is forced past the safe line. The watchdog that should cut the clock is masked.",
+        "Core fabric runs wide open. Temperature climbs through the trip point while the throttle map is zeroed so nothing pulls the rate back.",
+        "MSR locks are burned in. The node stays overclocked until the thermal path fails and the payload commits.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function shortCircuitVariants(title, target)
   return {
-    {
-      "> gpio write " .. target .. " rail=vcore value=0",
-      "exporting pin 47",
-      "direction=out",
-      "brownout detector masked",
-      "vcore 1.10V -> 0.31V",
-      "I2C NACK on pmic",
-      "rail collapsed",
-      committed(title),
-    },
-    {
-      "> dd if=/dev/urandom of=/dev/bus/" .. target .. " bs=4k",
-      "writing noise into power-management bus",
-      "xfer[" .. addr() .. "] fault",
-      "smbus timeout",
-      "overcurrent on 12V rail",
-      "protection FET opened",
-      committed(title),
-    },
-    {
-      "> busybox devmem " .. addr() .. " 32 0xFFFFFFFF",
-      "poking PMIC register map",
-      "wdog feed stopped",
-      "IRQn 12: undervolt",
-      "cpu0 entered reset hold",
-      committed(title),
-    },
+    makeScript(
+      "rail --dst " .. target .. " --bus VCORE --set 0",
+      {
+        "Power pin is driven low and the brownout detector is masked. The core rail sags and the monitor bus stops acknowledging writes.",
+        "Voltage fabric collapses. Protection on the 12V feed opens and the node is left without a stable source.",
+        "Hold state is latched. No recovery pulse is issued, so the circuit stays down through commit.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "poke --dst " .. target .. " --bus PWR --fill RAND",
+      {
+        "Noise is written across the power-management map. Transfers fault mid-frame and the management bus times out.",
+        "Overcurrent is seen on the main rail. The protection latch opens and the feed is cut.",
+        "Register file is left dirty. The next boot would need a full rail reset, which is not granted here.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "devmem --dst " .. target .. " --reg PMIC --val FULL",
+      {
+        "PMIC register map is forced high. Watchdog feed stops and the undervolt interrupt is raised in the same tick.",
+        "CPU0 enters reset hold. Remaining cores lose their clock reference and drop off the fabric.",
+        "Power state is frozen in collapse. The node will not leave hold until this session ends.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function synapseVariants(title, target)
   return {
-    {
-      "> kill -9 $(pgrep neural) --host " .. target,
-      "neural-core pid=" .. pid(),
-      "sending SIGKILL",
-      "stack smash detected",
-      "synapse ring buffer overrun",
-      "core dumped to /tmp/neural.core",
-      committed(title),
-    },
-    {
-      "> gdb -p " .. pid() .. " -batch -ex 'jump *0x0'",
-      "attaching to synapse daemon",
-      "0x00000000 in ?? ()",
-      "pc corrupted",
-      "watchdog: neural thread dead",
-      committed(title),
-    },
-    {
-      "> python3 -c 'import ctypes; ctypes.memset(" .. addr() .. ", 0, 4096)'",
-      "zeroing synaptic page",
-      "page fault in irq context",
-      "oops: unable to handle kernel paging request",
-      "neural bus offline",
-      committed(title),
-    },
+    makeScript(
+      "kill --dst " .. target .. " --svc neural --sig HARD",
+      {
+        "Neural core is pulled from the scheduler with a hard stop. The synapse ring overruns and the stack is marked smashed.",
+        "IRQ path cannot retire the fault. The bus that carries thought-state goes offline and the dump is written to scratch.",
+        "Daemon is gone. No restart vector is left in the table, so the link stays dark.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "jump --dst " .. target .. " --pc ZERO --thread synapse",
+      {
+        "Control is attached to the synapse daemon and the program counter is forced to an empty vector.",
+        "The thread dies in place. The watchdog reports the neural worker dead and refuses a hot restart.",
+        "Instruction stream is void. Further ticks have nowhere to fetch from, and the core stays halted.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "zero --dst " .. target .. " --page SYNAPSE --len 4096",
+      {
+        "Synaptic page is cleared in place. A fault lands in interrupt context and the kernel cannot handle the paging request.",
+        "The neural bus drops. Mapping tables that should retarget the page are empty, so the request never completes.",
+        "Memory window stays blank. The node has no synapse image left to run.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function contagionVariants(title, target)
   return {
-    {
-      "> worm --seed " .. target .. " --spread subnet",
-      "payload written to /tmp/.c.bin",
-      "copying to 10.0.0.0/24",
-      "hop 1 ok  hop 2 ok  hop 3 ok",
-      "lateral ssh: 14 hosts",
-      "replication locked in",
-      committed(title),
-    },
-    {
-      "> sendmail -t --inject " .. target,
-      "HELO subnet-node",
-      "MAIL FROM:<root@local>",
-      "250 2.0.0 Ok: queued",
-      "relay open, 96 recipients",
-      "daemon still running",
-      committed(title),
-    },
-    {
-      "> ssh-copy-id -i ~/.ssh/exploit root@" .. randomIp(),
-      "scanning authorized_keys",
-      "host key accepted (insecure)",
-      "dropping payload in crontab",
-      "* * * * * /tmp/.spread",
-      committed(title),
-    },
+    makeScript(
+      "worm --seed " .. target .. " --spread SUBNET --hold",
+      {
+        "Payload is written into the seed node and copied along the subnet. Each hop answers ok and leaves a replica behind.",
+        "Lateral links open. Host after host accepts the same image and the replication lock is set so nothing can wipe it mid-spread.",
+        "Mesh is armed. The worm stays resident and will keep moving for as long as this session holds.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "relay --dst " .. target .. " --inject QUEUE --open",
+      {
+        "Mail fabric is spoofed from a trusted origin. The queue accepts the blast and leaves the relay unlocked.",
+        "Recipient table expands. Dozens of nodes are listed and the daemon keeps running after the burst.",
+        "The inject stays in queue. Further hops will pull the same payload without a new handshake.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "plant --dst " .. target .. " --key TRUST --cron HOLD",
+      {
+        "Trust list is rewritten so this image is treated as a local service. The host key warning is ignored.",
+        "A persistent slot is dropped into the clock table. Each tick will wake the spread agent again.",
+        "Back door remains. Even if the live process is cleared, the clock will bring it back.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function opticsVariants(title, target)
   return {
-    {
-      "> systemctl stop display-manager@" .. target,
-      "stopping Xorg",
-      "framebuffer unmapped",
-      "drm: failed to enable crtc",
-      "output blacked out",
-      committed(title),
-    },
-    {
-      "> fbset --invert --device " .. target,
-      "inverting scanout",
-      "edid checksum invalid",
-      "colorspace=scrambled",
-      "vsync lost",
-      committed(title),
-    },
-    {
-      "> ffmpeg -f lavfi -i anoisesrc=c=pink -f fbdev /dev/fb0",
-      "injecting noise into optics pipeline",
-      "buffer underrun",
-      "camera isp stalled",
-      "lens data: NaN",
-      committed(title),
-    },
+    makeScript(
+      "stop --svc display --dst " .. target .. " --crtc OFF",
+      {
+        "Display manager is taken down and the framebuffer is unmapped. The scanout engine fails to enable a controller.",
+        "Output goes black. No fallback plane is attached, so the optics path has nothing to present.",
+        "The pipe is left dark. A later start would need a full display reset, which is withheld.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "invert --dst " .. target .. " --scanout SCRAMBLE",
+      {
+        "Scanout is inverted and the identity checksum on the optics link is rejected. Color space is marked scrambled.",
+        "Vertical sync is lost. Frames no longer land on a stable clock, so the image tears into noise.",
+        "The pipe cannot recover a lock. Optics stay unusable through commit.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "noise --dst " .. target .. " --into OPTICS --src PINK",
+      {
+        "Noise is injected into the optics pipeline. The buffer underruns and the camera processor stalls mid-frame.",
+        "Lens data returns empty. The image path has no valid sample to hand forward.",
+        "ISP remains stalled. The feed will not resume until this session releases it.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function cyberwareVariants(title, target)
   return {
-    {
-      "> rmmod -f biomon servo_ctl --host " .. target,
-      "module servo_ctl is in use",
-      "forcing remove",
-      "firmware handshake lost",
-      "ioctl(BIO_RESET) failed: EIO",
-      committed(title),
-    },
-    {
-      "> flashrom -p internal -w /tmp/corrupt.bin",
-      "erasing chip",
-      "verify failed at " .. addr(),
-      "firmware signature invalid",
-      "device left in ROM recovery",
-      committed(title),
-    },
-    {
-      "> ioctl /dev/cw0 CW_FAULT 1",
-      "raising fault pin",
-      "self-test aborted",
-      "all implants reporting DEGRADED",
-      committed(title),
-    },
+    makeScript(
+      "rmmod --dst " .. target .. " --drv biomon,servo --force",
+      {
+        "Implant drivers are forced out while still in use. The firmware handshake is lost and the reset ioctl fails.",
+        "Servo and monitor paths go dark. Hardware is still attached but has no software face to talk to.",
+        "The modules are not reloaded. Implants stay in a degraded hold until commit.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "flash --dst " .. target .. " --image CORRUPT --no-verify",
+      {
+        "Onboard store is erased and a bad image is written over it. Verify fails at the first map and the signature does not match.",
+        "The device falls into ROM recovery. User firmware is no longer trusted by the boot path.",
+        "Recovery is left empty. Nothing in this session will restore a clean image.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "fault --dst " .. target .. " --pin CW --raise",
+      {
+        "The fault pin is raised on the implant bus. Self-test aborts and every unit reports a degraded state.",
+        "No implant will accept a normal command while the pin is high. The bus stays in fault.",
+        "Hold is maintained. The payload does not clear the pin after commit.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function movementVariants(title, target)
   return {
-    {
-      "> systemctl mask locomotion@" .. target,
-      "freezing servos",
-      "pid hold on joints 0-11",
-      "encoder timeout",
-      "legs parked",
-      committed(title),
-    },
-    {
-      "> canbus inject " .. target .. " id=0x1A0 data=FF",
-      "actuator bus jammed",
-      "safety interlock latched",
-      "torque cmd dropped to 0",
-      committed(title),
-    },
-    {
-      "> gdb -p " .. pid() .. " -ex 'p walk_enabled=0'",
-      "attached to gaitd",
-      "walk_enabled = 0",
-      "state=LIMB_LOCK",
-      committed(title),
-    },
+    makeScript(
+      "mask --svc locomotion --dst " .. target .. " --joints ALL",
+      {
+        "Locomotion service is masked and the servos are frozen. Hold is applied across the joint set and the encoders time out.",
+        "Legs are parked. Torque commands are ignored because the unit is no longer in the active table.",
+        "The mask remains. Gait cannot be re-armed from the local console.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "inject --bus CAN --dst " .. target .. " --id ACT --data FULL",
+      {
+        "Actuator bus is jammed with a full-data frame. The safety interlock latches and torque is dropped to zero.",
+        "No motion command can pass the latch. The limbs hold their last pose.",
+        "The interlock is not cleared. Movement stays locked through commit.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "set --dst " .. target .. " --var walk_enabled --val 0",
+      {
+        "Gait daemon is attached and the walk flag is cleared in place. The state machine drops into limb lock.",
+        "Step planning stops. The body can stand or fall, but it will not take a commanded stride.",
+        "The flag stays zero. A local operator would have to reset the daemon to move again.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function weaponVariants(title, target)
   return {
-    {
-      "> fwupd --device " .. target .. " --flag jam",
-      "firing-pin solenoid jammed",
-      "ammo table crc mismatch",
-      "trigger irq ignored",
-      committed(title),
-    },
-    {
-      "> hexedit /dev/weapon0",
-      "rewriting ammo map at " .. addr(),
-      "chamber=UNKNOWN",
-      "safety bits flipped",
-      "cycle aborted",
-      committed(title),
-    },
-    {
-      "> evdev grab /dev/input/trigger",
-      "exclusive grab ok",
-      "dropping all fire events",
-      "userspace trigger offline",
-      committed(title),
-    },
+    makeScript(
+      "jam --dst " .. target .. " --solenoid FIRE --flag SET",
+      {
+        "Firing solenoid is marked jammed and the ammo table checksum fails. Trigger interrupts are ignored.",
+        "The cycle cannot start. Chamber state is unknown and the safety bits no longer match the live weapon.",
+        "Jam is held. No fire event will be accepted until this session ends.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "rewrite --dst " .. target .. " --map AMMO --bits SAFETY",
+      {
+        "Ammo map is rewritten in place and the chamber tag is set to unknown. Safety bits are flipped against the firmware.",
+        "The fire cycle aborts on the next check. The weapon refuses to complete a stroke.",
+        "The map is left dirty. A clean reload would be required before the tool can cycle again.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "grab --dst " .. target .. " --dev TRIGGER --exclusive",
+      {
+        "The trigger input is taken exclusively. Fire events are dropped before they reach the weapon service.",
+        "Userspace can still pull, but nothing is delivered downstream. The path stays silent.",
+        "The grab is not released. The trigger remains offline through commit.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function psychosisVariants(title, target)
   return {
-    {
-      "> systemctl restart affectd@" .. target .. " --flood",
-      "forking emotion daemon x64",
-      "affect table scrambled",
-      "aggression=MAX fear=0",
-      committed(title),
-    },
-    {
-      "> python3 /opt/net/emote.py --seed random",
-      "loading weights",
-      "NaN in softmax",
-      "policy head diverged",
-      "inhibitory path cut",
-      committed(title),
-    },
-    {
-      "> sysctl -w net.neural.align=0",
-      "alignment supervisor disabled",
-      "watchdog ignored SIGSYS",
-      "process left unjailed",
-      committed(title),
-    },
+    makeScript(
+      "restart --svc affectd --dst " .. target .. " --flood",
+      {
+        "Affect daemon is restarted under a flood of worker copies. The emotion table is scrambled in the shuffle.",
+        "Aggression is pegged and fear is cleared. Inhibitory paths no longer fire in the right order.",
+        "The flood is left running. Alignment cannot catch up while the table keeps changing.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "seed --dst " .. target .. " --policy RANDOM --cut INHIBIT",
+      {
+        "Policy weights are loaded from a random seed. The decision head diverges and the inhibitory path is cut.",
+        "Action choice no longer tracks the live scene. The node acts on noise as if it were intent.",
+        "The cut remains. Nothing in this session will restore the original policy.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "sysctl --dst " .. target .. " --align 0 --jail OFF",
+      {
+        "Alignment supervisor is disabled and the watchdog ignores the trap that should stop a runaway task.",
+        "The process is left unjailed. Guard rails that keep affect in range are no longer attached.",
+        "The node stays open. A later operator would have to re-enable the supervisor by hand.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function suicideVariants(title, target)
   return {
-    {
-      "> shutdown -h now " .. target,
-      "Broadcast message from root",
-      "The system is going down NOW!",
-      "init: sending SIGTERM to all",
-      "poweroff",
-      committed(title),
-    },
-    {
-      "> echo 1 > /proc/sys/kernel/panic_on_oops",
-      "watchdog: BUG: soft lockup",
-      "Kernel panic - not syncing",
-      "rebooting in 0 seconds",
-      committed(title),
-    },
-    {
-      "> kill -9 1",
-      "refusing to kill init; forcing",
-      "pid 1 exited",
-      "no more processes",
-      "halted",
-      committed(title),
-    },
+    makeScript(
+      "halt --dst " .. target .. " --now --broadcast",
+      {
+        "A halt is broadcast from the control face. Every service is told the system is going down in this tick.",
+        "Term signals fan out. The last process table is cleared and power is marked off.",
+        "The node does not return. No wake vector is armed.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "panic --dst " .. target .. " --on oops --reboot 0",
+      {
+        "The kernel is told to panic on the next fault, then a soft lock is forced. Sync is abandoned.",
+        "There is no reboot delay. The image stops in place and does not come back up.",
+        "Logs are not flushed. The last state is whatever was in memory at the trip.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "kill --dst " .. target .. " --pid 1 --force",
+      {
+        "The init task is forced down. The system refuses, then the force path is used anyway.",
+        "With no process 1, the table empties. There is nothing left to schedule.",
+        "The machine is halted. This session ends with a dark node.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function resetVariants(title, target)
   return {
-    {
-      "> shutdown -r now " .. target,
-      "Rebooting.",
-      "unmounting /data",
-      "kexec load failed, falling back",
-      "BIOS reset",
-      committed(title),
-    },
-    {
-      "> fsck -f -y /dev/mapper/system",
-      "superblock dirty",
-      "inode table rebuilt",
-      "FILE SYSTEM WAS MODIFIED",
-      "remount required",
-      committed(title),
-    },
-    {
-      "> systemctl isolate rescue.target",
-      "stopping all non-essential units",
-      "dropped to rescue shell",
-      "network offline",
-      committed(title),
-    },
+    makeScript(
+      "reboot --dst " .. target .. " --now --fallback BIOS",
+      {
+        "A reboot is issued immediately. Data is unmounted and the fast kexec path fails, so the firmware reset is used.",
+        "The node drops to a clean firmware entry. Running services do not survive the jump.",
+        "Control returns only after the payload has already committed. The live image is gone.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "fsck --dst " .. target .. " --vol SYSTEM --force --yes",
+      {
+        "The system volume is marked dirty and the inode table is rebuilt in place. The fabric is reported modified.",
+        "A remount is required before any service can trust the store. That remount is not granted here.",
+        "The node sits on a broken mount. User data is not presented until a later repair.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "isolate --dst " .. target .. " --target RESCUE --net OFF",
+      {
+        "All non-essential units are stopped and the node is dropped into a rescue shell. The network face is taken down.",
+        "Only a local console would have access, and this session does not offer one.",
+        "The isolate holds. The system will not rejoin the net until it is rebuilt.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function sonicVariants(title, target)
   return {
-    {
-      "> aplay -D " .. target .. " /dev/urandom",
-      "Playing raw data 'urandom' : Signed 16 bit",
-      "buffer underrun, period dropped",
-      "amp clip @ +12dB",
-      "cochlea irq storm",
-      committed(title),
-    },
-    {
-      "> alsactl restore --force",
-      "overwriting mixer state",
-      "master=127 gain=unsafe",
-      "dc offset on line-out",
-      "driver stalled",
-      committed(title),
-    },
-    {
-      "> sox -n -t alsa " .. target .. " synth 8 sine 18k",
-      "frequency sweep 18k -> 22k",
-      "sample rate drifted",
-      "underrun x44",
-      committed(title),
-    },
+    makeScript(
+      "play --dst " .. target .. " --src RAND --amp UNSAFE",
+      {
+        "A raw stream is forced into the audio path. Periods drop and the amplifier clips well past the safe line.",
+        "The cochlear interrupt storms. The sink cannot keep a stable clock under the load.",
+        "The stream is left running. Hearing paths stay saturated through commit.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "mixer --dst " .. target .. " --restore FORCE --gain MAX",
+      {
+        "Mixer state is overwritten. Master is pegged and a DC offset is left on the line.",
+        "The driver stalls while trying to retire the bad gain map. No clean sample leaves the device.",
+        "The force restore is not undone. Audio remains in an unsafe profile.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "synth --dst " .. target .. " --tone 18K --sweep UP",
+      {
+        "A high tone is swept past the top of the audible map. Sample rate drifts and underruns stack up.",
+        "The output path loses its timing source. What is left is a broken, piercing stream.",
+        "The sweep is not stopped early. The payload rides it until commit.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function whistleVariants(title, target)
   return {
-    {
-      "> arping -c 256 -A " .. randomIp(),
-      "broadcasting gratuitous ARP",
-      "cache poisoned on 14 hosts",
-      "beacon interval=10ms",
-      committed(title),
-    },
-    {
-      "> nping --icmp --rate 200 " .. randomIp(),
-      "redirect flood",
-      "gateway changed",
-      "hosts following decoy",
-      committed(title),
-    },
-    {
-      "> avahi-publish -s " .. target .. " _alert._tcp 9",
-      "service registered",
-      "mdns spam",
-      "listeners converging",
-      committed(title),
-    },
+    makeScript(
+      "beacon --dst " .. randomIp() .. " --arp GRAT --count 256",
+      {
+        "Gratuitous advertisements are blasted onto the local fabric. Neighbor caches are poisoned and the beacon interval is cut short.",
+        "Hosts begin following the decoy address. Attention is pulled off the real path.",
+        "The beacon stays up. Listeners keep converging on the false node.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "redirect --dst " .. randomIp() .. " --icmp --rate HIGH",
+      {
+        "Redirects are flooded until the gateway of record changes. Traffic is pointed at the decoy.",
+        "Hosts follow the new route. The real path goes quiet as the table updates.",
+        "The redirect is left in place. Nothing in this session restores the original gateway.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "publish --svc ALERT --dst " .. target .. " --mdns SPAM",
+      {
+        "An alert service is published on the local name bus and then spammed so every listener turns toward it.",
+        "Attention converges. The decoy is now the loudest face on the segment.",
+        "The publication is not withdrawn. The whistle keeps ringing after commit.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function memoryVariants(title, target)
   return {
-    {
-      "> shred -n 3 -z /dev/shm/*",
-      "wiping shared pages on " .. target,
-      "drop_caches = 3",
-      "0kB available in kmem",
-      committed(title),
-    },
-    {
-      "> dd if=/dev/zero of=/proc/" .. pid() .. "/mem",
-      "zeroing process address space",
-      "segfault in userspace",
-      "oom-killer invoked",
-      committed(title),
-    },
-    {
-      "> echo 1 > /proc/sys/vm/compact_memory",
-      "purging reclaimable slabs",
-      "swapout forced",
-      "working set gone",
-      committed(title),
-    },
+    makeScript(
+      "wipe --dst " .. target .. " --vol SHM --passes 3 --zero",
+      {
+        "Shared pages are overwritten and then zeroed. Reclaimable cache is dropped so nothing can be pulled back.",
+        "The working set is gone. The node has no scratch left for live tasks.",
+        "A further compact is forced. What remains is an empty map.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "zero --dst " .. target .. " --pid " .. pid() .. " --space ALL",
+      {
+        "The process address space is filled with zeros. A fault lands in user space and the killer is invoked.",
+        "The task is reaped. Its memory is not handed back to any peer in this session.",
+        "The space stays empty. There is no image left to resume.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "compact --dst " .. target .. " --slabs PURGE --swap FORCE",
+      {
+        "Reclaimable slabs are purged and a forced swap-out runs. The working set is evicted in one pass.",
+        "Live pages are gone from core. The node will stall on any touch that expects them back.",
+        "The compact is not reversed. Memory stays thin through commit.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function detonateVariants(title, target)
   return {
-    {
-      "> squib arm --id " .. target,
-      "primer voltage 0.0V -> 12.4V",
-      "safety cap removed",
-      "fire",
-      committed(title),
-    },
-    {
-      "> i2cset 0x40 0x01 0xFF",
-      "overvolting detonator cap",
-      "esr out of range",
-      "thermal runaway",
-      committed(title),
-    },
-    {
-      "> cansend can0 1F0#DEADBEEF",
-      "injecting arm command",
-      "ack received",
-      "charge armed",
-      committed(title),
-    },
+    makeScript(
+      "arm --id " .. target .. " --primer UP --safety OFF",
+      {
+        "Primer voltage is driven up and the safety cap is removed. The charge path is marked live.",
+        "The fire command is sent on the same tick. There is no second confirmation.",
+        "The arming latch stays closed. The payload has already left the rail.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "overvolt --dst " .. target .. " --cap DET --val FULL",
+      {
+        "The detonator cap is overvolted past its rating. Internal resistance leaves the safe range and thermal runaway starts.",
+        "The cell cannot shed the charge. Energy goes into the primer instead of a dump path.",
+        "Runaway is allowed to finish. No cutoff is issued from this session.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "inject --bus CAN --id ARM --frame LIVE",
+      {
+        "An arm frame is injected on the control bus and the device acknowledges. The charge is marked armed.",
+        "A follow-on fire is implied by the live state. The bus does not wait for a human confirm.",
+        "The ack is kept. The device remains in a fired or firing state through commit.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function distractVariants(title, target)
   return {
-    {
-      "> systemd-run --on-active=0 decoy@" .. target,
-      "spawned fake process tree",
-      "tty flood on vt3",
-      "attention diverted",
-      committed(title),
-    },
-    {
-      "> logger -p kern.emerg 'FIRE ALARM'",
-      "broadcast to wall(1)",
-      "console bell x12",
-      "alerts acknowledged",
-      committed(title),
-    },
-    {
-      "> gpio strobe --pin 3 --hz 18",
-      "beacon lit",
-      "photodiode saturated",
-      "watchers turning",
-      committed(title),
-    },
+    makeScript(
+      "spawn --decoy " .. target .. " --tree FAKE --tty FLOOD",
+      {
+        "A fake process tree is started and the console is flooded. Local attention is pulled to the decoy face.",
+        "Alerts stack on the visible terminal. The real path goes unwatched for the length of the burst.",
+        "The decoy is left up. Nothing clears the flood automatically.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "wall --dst " .. target .. " --level EMERG --bell 12",
+      {
+        "An emergency line is broadcast to every console and the bell is rung in a tight loop. Operators turn toward the alarm.",
+        "Acknowledgments come back on the decoy channel. The real event is not in that stream.",
+        "The alarm is not cancelled. Attention stays off the true target.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "strobe --dst " .. target .. " --pin BEACON --hz 18",
+      {
+        "A visible beacon is driven hard enough to saturate nearby sensors. Watchers turn toward the light.",
+        "The decoy is now the brightest object in the local field. Other cues are ignored.",
+        "The strobe keeps running. This session does not switch it off.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function controlVariants(title, target)
   return {
-    {
-      "> gdb -p " .. pid() .. " --eval-command='set $pc=&shell'",
-      "attaching to " .. target,
-      "tty hijack complete",
-      "root prompt on pts/0",
-      committed(title),
-    },
-    {
-      "> ssh -t root@" .. randomIp() .. " 'exec script -c bash'",
-      "host key warning ignored",
-      "PTY allocated",
-      "session is ours",
-      committed(title),
-    },
-    {
-      "> nsenter -t " .. pid() .. " -m -u -i -n /bin/sh",
-      "entered container namespace",
-      "uid=0 gid=0",
-      "control socket open",
-      committed(title),
-    },
+    makeScript(
+      "attach --dst " .. target .. " --pc SHELL --tty 0",
+      {
+        "Control is attached to the live task and the program counter is retargeted at a shell entry. The first tty is ours.",
+        "A root prompt is sitting on the console. Local commands will run as the node itself.",
+        "The attach is held. This session keeps the tty until it is done.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "session --dst " .. randomIp() .. " --as ROOT --pty NEW",
+      {
+        "A new control session is opened under the root identity. The host-key warning is ignored and a pty is allocated.",
+        "The session is ours. Input and output now pass through this channel, not the local operator.",
+        "The pty stays allocated. Control is not handed back.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "enter --dst " .. target .. " --ns ALL --uid 0",
+      {
+        "Every namespace on the target is entered and the identity is set to zero. The control socket opens inside the same jail as the node.",
+        "From here, local policy treats this session as the owner. There is no further gate.",
+        "The enter is not unwound. The socket remains open through commit.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function cameraVariants(title, target)
   return {
-    {
-      "> v4l2-ctl -d " .. target .. " --overlay=1",
-      "taking over scanout",
-      "ptz unlocked",
-      "feed hooked",
-      committed(title),
-    },
-    {
-      "> ffmpeg -i rtmp://local/cam -f fbdev /dev/fb0",
-      "replacing live feed",
-      "keyframes injected",
-      "operator view spoofed",
-      committed(title),
-    },
-    {
-      "> systemctl stop motion@" .. target,
-      "analytics paused",
-      "lens parked",
-      "recording stopped",
-      committed(title),
-    },
+    makeScript(
+      "take --dst " .. target .. " --scanout ON --ptz UNLOCK",
+      {
+        "Scanout is taken over and the pan-tilt lock is removed. The live feed now belongs to this session.",
+        "The operator view is hooked. What they see is whatever this channel writes.",
+        "The hook is left in place. The camera will not revert on its own.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "spoof --dst " .. target .. " --feed LOCAL --keyframes INJECT",
+      {
+        "The live feed is replaced with a local stream and keyframes are injected so the splice is clean.",
+        "The operator view is spoofed. Motion on the real lens is no longer what the monitor shows.",
+        "The inject stays up. A clean cut back is not offered.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "stop --svc motion --dst " .. target .. " --lens PARK",
+      {
+        "Analytics are paused and the lens is parked. Recording stops on the same tick.",
+        "The turret or camera is still powered, but it will not track or store a frame.",
+        "The stop is held. Nothing in this session restarts the watch.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function powerVariants(title, target)
   return {
-    {
-      "> systemctl stop " .. target,
-      "stopping unit",
-      "sent SIGTERM",
-      "power relay opened",
-      committed(title),
-    },
-    {
-      "> acpitool -s",
-      "entering S5",
-      "devices powered down",
-      "wake disabled",
-      committed(title),
-    },
-    {
-      "> i2cset 0x20 0x00 0x00",
-      "cutting enable pin",
-      "rail at 0.00V",
-      "device silent",
-      committed(title),
-    },
+    makeScript(
+      "stop --dst " .. target .. " --unit ALL --relay OPEN",
+      {
+        "The unit is stopped and a term is sent to every remaining task. The power relay is opened.",
+        "The device is dark. Wake lines are not driven.",
+        "The relay stays open. Power will not return from this session.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "sleep --dst " .. target .. " --state S5 --wake OFF",
+      {
+        "The node is sent into a full off state. Devices on the rail power down and wake is disabled.",
+        "No timer or net event will bring it back. The sleep is sticky.",
+        "The state is left in S5. A physical reset would be required.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "cut --dst " .. target .. " --pin ENABLE --volt 0",
+      {
+        "The enable pin is cut and the rail falls to zero. The device goes silent on the bus.",
+        "No command face remains. The node is electrically present but logically gone.",
+        "The pin is not restored. Silence holds through commit.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function vehicleVariants(title, target)
   return {
-    {
-      "> cansend can0 0C0#00000000",
-      "injecting force-brake on " .. target,
-      "ABS override",
-      "wheels locked",
-      committed(title),
-    },
-    {
-      "> ecu-tool --unlock --flash-off",
-      "immobilizer bypassed",
-      "engine cut",
-      "ignition held in reset",
-      committed(title),
-    },
-    {
-      "> python3 /opt/net/canflood.py --id 0x7FF",
-      "bus off after 128 errors",
-      "controller timeout",
-      "drive-by-wire offline",
-      committed(title),
-    },
+    makeScript(
+      "brake --dst " .. target .. " --bus CAN --force LOCK",
+      {
+        "A force-brake frame is injected and the anti-lock path is overridden. The wheels are locked in place.",
+        "The vehicle cannot roll while the lock is held. Drive commands are dropped.",
+        "The lock is not released. The chassis stays stopped.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "cut --dst " .. target .. " --ecu UNLOCK --ignition HOLD",
+      {
+        "The immobilizer is bypassed only long enough to cut the engine, then ignition is held in reset.",
+        "The motor will not catch. Drive-by-wire has no throttle source.",
+        "Reset is held. The vehicle remains dead in the lane.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "flood --dst " .. target .. " --bus CAN --id MAX --until OFF",
+      {
+        "The control bus is flooded until it goes off. The controller times out and drive-by-wire drops offline.",
+        "No steer, brake, or throttle command can be delivered on a dead bus.",
+        "The flood is left in place. The bus will not recover in this session.",
+      },
+      committed(title)
+    ),
   }
 end
 
 local function genericVariants(title)
   local ip = randomIp()
   return {
-    {
-      "> nc -v " .. ip .. " 6148",
-      "Connection to " .. ip .. " 6148 port [tcp] succeeded!",
-      "banner: NET-ACCESS/2.0",
-      "inject " .. title,
-      "handshake ................ ok",
-      "write payload " .. addr(),
-      committed(title),
-    },
-    {
-      "> python3 -c 'import pty; pty.spawn(\"/bin/sh\")'",
-      "PTY allocated",
-      "uid=0(root) gid=0(root)",
-      "exec " .. title,
-      "payload mapped at " .. addr(),
-      committed(title),
-    },
-    {
-      "> LD_PRELOAD=./hook.so " .. title,
-      "constructor ran",
-      "symbols intercepted: 6",
-      "mem[" .. addr() .. "] patched",
-      "hook armed",
-      committed(title),
-    },
+    makeScript(
+      "connect --dst " .. ip .. " --port NET --payload " .. title,
+      {
+        "The net-access face accepts the session and a handshake is completed. The payload is written into the open map.",
+        "The channel stays up. Further commands can ride this same socket without a new hello.",
+        "The write is sealed. The payload remains resident through commit.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "exec --dst " .. ip .. " --as ROOT --cmd " .. title,
+      {
+        "A root shell is opened on the remote face and the named payload is executed in that context.",
+        "The process is mapped into live memory. Its tokens stay valid for the rest of the session.",
+        "The exec is not torn down. Control remains on this channel.",
+      },
+      committed(title)
+    ),
+    makeScript(
+      "hook --dst " .. ip .. " --preload --cmd " .. title,
+      {
+        "A preload hook is planted so the next start of the target command runs our image first. Symbols are intercepted and a memory slot is patched.",
+        "The hook is armed. Later launches on this node will enter through the same gate.",
+        "The patch is left in place. Nothing in this session removes it.",
+      },
+      committed(title)
+    ),
   }
 end
 
@@ -986,7 +1132,7 @@ function Stream.drawSettings()
   ImGui.SetNextWindowSize(360, 180, ImGuiCond.FirstUseEver)
   local visible = ImGui.Begin("QuickHack stream", ImGuiWindowFlags.AlwaysAutoResize)
   if visible ~= false then
-    ImGui.Text("Left-side code color and opacity")
+    ImGui.Text("Left-side code color, opacity, and write speed")
     local changed = false
     local nr, rOk = slider("Red##chan", color.r, 0.0, 1.5)
     if rOk then
@@ -1008,18 +1154,24 @@ function Stream.drawSettings()
       opacity = na
       changed = true
     end
+    local ns, sOk = slider("Write speed##rate", CHARS_PER_SEC, MIN_CPS, MAX_CPS)
+    if sOk then
+      CHARS_PER_SEC = clamp(ns, MIN_CPS, MAX_CPS)
+      changed = true
+    end
+    ImGui.Text(string.format("Chars / sec: %.0f", CHARS_PER_SEC))
     if ImGui.Button("RED") then
-      color.r, color.g, color.b = 1.0, 0.12, 0.10
+      color.r, color.g, color.b = 1.0, 0.0, 0.0
       changed = true
     end
     ImGui.SameLine()
     if ImGui.Button("BLUE") then
-      color.r, color.g, color.b = 0.20, 0.40, 1.20
+      color.r, color.g, color.b = 0.0, 0.0, 1.0
       changed = true
     end
     ImGui.SameLine()
     if ImGui.Button("GREEN") then
-      color.r, color.g, color.b = 0.20, 1.05, 0.28
+      color.r, color.g, color.b = 0.0, 1.0, 0.0
       changed = true
     end
     if changed then

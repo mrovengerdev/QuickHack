@@ -163,6 +163,32 @@ public class QuickHackAim extends IScriptable {
 
 
 public class QuickHackIcons extends IScriptable {
+  public final static func IconRecord(command: ref<QuickhackData>) -> wref<UIIcon_Record> {
+    let record: wref<UIIcon_Record>;
+    if !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return null;
+    };
+    record = TweakDBInterface.GetUIIconRecord(command.m_icon);
+    if IsDefined(record) {
+      return record;
+    };
+    return null;
+  }
+
+  public final static func DebugOf(command: ref<QuickhackData>) -> String {
+    let record: wref<UIIcon_Record> = QuickHackIcons.IconRecord(command);
+    if !IsDefined(command) {
+      return "no-command";
+    };
+    if !TDBID.IsValid(command.m_icon) {
+      return "icon-id-invalid";
+    };
+    if !IsDefined(record) {
+      return "no-uiicon-record";
+    };
+    return ResRef.ToString(record.AtlasResourcePath()) + " part=" + NameToString(record.AtlasPartName());
+  }
+
   public final static func AtlasPath(iconID: TweakDBID) -> String {
     let record: wref<UIIcon_Record> = TweakDBInterface.GetUIIconRecord(iconID);
     if !TDBID.IsValid(iconID) || !IsDefined(record) {
@@ -259,12 +285,12 @@ public class QuickHackIcons extends IScriptable {
   }
 
   public final static func Paint(image: wref<inkImage>, command: ref<QuickhackData>) -> Bool {
-    let record: wref<UIIcon_Record>;
-    if !IsDefined(image) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return false;
-    };
-    record = TweakDBInterface.GetUIIconRecord(command.m_icon);
-    if !IsDefined(record) {
+    return QuickHackIcons.PaintFor(image, command, null);
+  }
+
+  public final static func PaintFor(image: wref<inkImage>, command: ref<QuickhackData>, owner: wref<IScriptable>) -> Bool {
+    let record: wref<UIIcon_Record> = QuickHackIcons.IconRecord(command);
+    if !IsDefined(image) || !IsDefined(record) {
       return false;
     };
     image.SetVisible(true);
@@ -272,6 +298,9 @@ public class QuickHackIcons extends IScriptable {
     image.SetSize(new Vector2(56.00, 56.00));
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
+    if IsDefined(owner) && TDBID.IsValid(command.m_icon) {
+      InkImageUtils.RequestSetImage(owner, image, command.m_icon);
+    };
     return true;
   }
 }

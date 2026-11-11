@@ -171,14 +171,23 @@ local function applyIcon(slot, command)
   end
   local painted = false
   local okPaint, redsPaint = pcall(function()
-    return QuickHackIcons.Paint(slot.placeholder, command)
+    return QuickHackIcons.PaintFor(slot.placeholder, command, Game.GetPlayer())
   end)
   if okPaint and redsPaint == true then
     painted = true
   end
   local path, part = iconStrings(command)
+  if (path == nil or path == "") and part ~= nil and part ~= "" and part ~= "None" then
+    path = "base\\gameplay\\gui\\common\\icons\\quickhacks_icons.inkatlas"
+  end
   if applyAtlas(slot.placeholder, path, part, ICON) then
     painted = true
+  end
+  local okDbg, dbg = pcall(function()
+    return QuickHackIcons.DebugOf(command)
+  end)
+  if not okDbg then
+    dbg = tostring(dbg)
   end
   if painted then
     slot.icon = slot.placeholder
@@ -192,13 +201,13 @@ local function applyIcon(slot, command)
     end)
     if not partPrinted then
       partPrinted = true
-      print("QuickHack: icon painted " .. tostring(path) .. " " .. tostring(part))
+      print("QuickHack: icon painted " .. tostring(path) .. " " .. tostring(part) .. " " .. tostring(dbg))
     end
     return
   end
   if not imageErrorPrinted then
     imageErrorPrinted = true
-    print("QuickHack: icon paint failed " .. tostring(path) .. " " .. tostring(part))
+    print("QuickHack: icon paint failed " .. tostring(path) .. " " .. tostring(part) .. " " .. tostring(dbg))
   end
 end
 
