@@ -115,7 +115,16 @@ local function randomIp()
 end
 
 local function addr()
-  return string.format("0x%08X", math.random(0, 0x7FFFFFFF))
+  local hex = "0123456789ABCDEF"
+  local top = math.random(1, 15)
+  local out = "0x" .. string.sub(hex, top + 1, top + 1)
+  local i = 1
+  while i <= 7 do
+    local n = math.random(0, 15)
+    out = out .. string.sub(hex, n + 1, n + 1)
+    i = i + 1
+  end
+  return out
 end
 
 local function pingLines(count)
@@ -454,6 +463,9 @@ function Stream.destroy()
   active = nil
 end
 
+math.randomseed(os.time())
+math.random()
+math.random()
 loadCfg()
 
 return Stream
