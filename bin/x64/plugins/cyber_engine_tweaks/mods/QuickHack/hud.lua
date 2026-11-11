@@ -435,7 +435,7 @@ local function applyIcon(slot, command)
     end
     local path, part = iconStrings(command)
     if (path == nil or path == "") and part ~= nil and part ~= "" and part ~= "None" then
-      path = "base\gameplay\gui\common\icons\quickhacks_icons.inkatlas"
+      path = "base\\gameplay\\gui\\common\\icons\\quickhacks_icons.inkatlas"
     end
     if applyAtlas(slot.placeholder, path, part, ICON) then
       painted = true

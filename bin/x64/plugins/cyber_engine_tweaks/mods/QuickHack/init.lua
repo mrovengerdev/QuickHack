@@ -1,6 +1,28 @@
 local Target = require("target")
 local Cast = require("cast")
-local Hud = require("hud")
+
+local function missingHud(err)
+  print("QuickHack: hud load error: " .. tostring(err))
+  local function noop()
+  end
+  return {
+    install = noop,
+    ensure = noop,
+    refresh = noop,
+    invalidate = noop,
+    destroy = noop,
+  }
+end
+
+local Hud
+do
+  local ok, result = pcall(require, "hud")
+  if ok and type(result) == "table" and type(result.ensure) == "function" then
+    Hud = result
+  else
+    Hud = missingHud(result)
+  end
+end
 
 local function missingStream(err)
   print("QuickHack: stream load error: " .. tostring(err))
@@ -53,7 +75,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 55")
+  print("QuickHack ready build 56")
 end)
 
 registerForEvent("onOverlayOpen", function()
