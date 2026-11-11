@@ -6,7 +6,6 @@ local LEFT = 36
 local TOP = 150
 local WIDTH = 640
 local CHARS_PER_SEC = 92
-local SCROLL_PX_PER_SEC = 18
 local DONE_SCROLL_PX_PER_SEC = 46
 local CFG = "bin/x64/plugins/cyber_engine_tweaks/mods/QuickHack/stream.cfg"
 
@@ -333,13 +332,8 @@ function Stream.tick(dt)
   local i = 1
   while i <= #jobs do
     local job = jobs[i]
-    local typing = active ~= nil and job == jobs[#jobs] and job.depart ~= true and job.shown < #job.text
-    if not typing then
-      local speed = SCROLL_PX_PER_SEC
-      if active == nil or job.depart == true then
-        speed = DONE_SCROLL_PX_PER_SEC
-      end
-      job.y = job.y - speed * dt
+    if active == nil or job.depart == true then
+      job.y = job.y - DONE_SCROLL_PX_PER_SEC * dt
     end
     i = i + 1
   end
