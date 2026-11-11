@@ -295,9 +295,6 @@ local function applyIcon(slot, command)
       end
       if widget ~= nil then
         slot.icon = widget
-        if WHITE ~= nil then
-          slot.icon:SetTintColor(WHITE)
-        end
         slot.icon:SetOpacity(1.0)
         slot.icon:SetVisible(true)
       end
@@ -404,6 +401,27 @@ local function readCost(command)
   return math.floor(value + 0.001)
 end
 
+local tintPrinted = false
+
+local function gameTint(widget, unaffordable)
+  if widget == nil then
+    return
+  end
+  local ok = pcall(function()
+    widget:SetStyle(ResRef.FromString("base\\gameplay\\gui\\common\\main_colors.inkstyle"))
+    widget:BindProperty(CName.new("tintColor"), CName.new(unaffordable and "MainColors.Red" or "MainColors.Blue"))
+  end)
+  if not ok then
+    if not tintPrinted then
+      tintPrinted = true
+      print("QuickHack: game color binding failed, using fallback tint")
+    end
+    pcall(function()
+      widget:SetTintColor(unaffordable and RED or NUMBER_TINT)
+    end)
+  end
+end
+
 local function paintRam(slot, command)
   if slot.ramText == nil then
     return
@@ -417,13 +435,15 @@ local function paintRam(slot, command)
   slot.ramText:SetText(tostring(cost))
   local available = availableRam()
   local unaffordable = available ~= nil and cost > available
-  slot.ramText:SetTintColor(unaffordable and RED or NUMBER_TINT)
+  gameTint(slot.ramText, unaffordable)
   slot.ramText:SetVisible(true)
-  local edgeColor = unaffordable and RED or NUMBER_TINT
+  if slot.icon ~= nil and slot.iconKey ~= nil then
+    gameTint(slot.icon, unaffordable)
+  end
   if slot.edges ~= nil then
     local edge = 1
     while slot.edges[edge] ~= nil do
-      slot.edges[edge]:SetTintColor(edgeColor)
+      gameTint(slot.edges[edge], unaffordable)
       slot.edges[edge]:SetOpacity(0.75)
       slot.edges[edge]:SetVisible(true)
       edge = edge + 1
