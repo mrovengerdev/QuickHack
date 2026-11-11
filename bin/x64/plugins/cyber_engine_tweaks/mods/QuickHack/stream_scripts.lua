@@ -63,7 +63,15 @@ local function create()
     local addr = opts.addr or mem()
     local exitcode = opts.exit or "0"
     local zeros = opts.zeros
-    local hexlines = opts.hexlines or 2
+    local custom = opts.hex
+    local hexlines = opts.hexlines
+    if hexlines == nil then
+      if custom ~= nil then
+        hexlines = #custom
+      else
+        hexlines = 2
+      end
+    end
     local base = opts.base or math.random(0x200000, 0xEFFFF0)
     local lines = {
       "  $ qh exec " .. banner(title) .. " --at " .. addr,
@@ -79,7 +87,11 @@ local function create()
     lines[#lines + 1] = "  message      " .. message
     local h = 0
     while h < hexlines do
-      lines[#lines + 1] = hexrow(base + (h * 8), zeros)
+      if custom ~= nil and custom[h + 1] ~= nil then
+        lines[#lines + 1] = "  " .. string.format("0x%06X", base + (h * 8)) .. "  " .. custom[h + 1]
+      else
+        lines[#lines + 1] = hexrow(base + (h * 8), zeros)
+      end
       h = h + 1
     end
     lines[#lines + 1] = "  $"
@@ -464,6 +476,19 @@ local function create()
     }, "ALL NODES INFECTED")
   end)
 
+  add("contagion", function(title)
+    return script(title, {
+      "        A-T    T-A    G-C    C-G",
+      "         \\      /      \\      /",
+      "          T-A  A-T    C-G  G-C",
+      "        ========================",
+      "        COPY   COPY   COPY  COPY",
+      meter("spread", 16, "100%"),
+    }, "STRAND REPLICATED HOST-WIDE", {
+      hex = { "C0 17 A1 90 FF FF 00 04", "41 54 47 43 41 54 47 43" },
+    })
+  end)
+
   add("sonic", function(title)
     return script(title, {
       "     2k  ##",
@@ -645,6 +670,19 @@ local function create()
       meter("own", 16, "REMOTE"),
       meter("loc", 0, "CUT"),
     }, "REMOTE PIPE ATTACHED")
+  end)
+
+  add("control", function(title)
+    return script(title, {
+      "    ICE   ################",
+      "          ######  ##  ####",
+      "          ####        ####",
+      "          ##   ****     ##",
+      "          ****************",
+      meter("hole", 16, "OPEN"),
+    }, "ICE WALL BREACHED", {
+      hex = { "49 43 45 00 00 00 00 00", "00 00 DE AD 00 00 00 00" },
+    })
   end)
 
   add("generic", function(title)
