@@ -1,0 +1,4 @@
+.DS_Store
+tools/quickhack-widget/bin/
+tools/quickhack-widget/obj/
+tools/quickhack-widget/out/

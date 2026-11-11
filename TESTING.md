@@ -16,14 +16,14 @@ Launch the game once so redscript finishes its first compile, then quit.
 
 On the PC where the game is installed:
 
-1. Zip `bin` and `r6` so both are at the root of the archive, not nested in an extra folder. Command: `zip -r QuickHack.zip bin r6`
+1. Zip `bin`, `r6`, and `archive` so all three are at the root of the zip, not nested in an extra folder. Command: `zip -r QuickHack.zip bin r6 archive`
 2. Vortex, Mods, Install From File, select `QuickHack.zip`, Enable, Deploy Mods.
-3. Confirm files landed at `<game>\bin\x64\plugins\cyber_engine_tweaks\mods\QuickHack\init.lua` and `<game>\r6\scripts\QuickHack\QuickHack.reds`. `<game>` is the folder that contains `bin` and `r6`. Steam example: `C:\Program Files (x86)\Steam\steamapps\common\Cyberpunk 2077`.
+3. Confirm files landed at `<game>\bin\x64\plugins\cyber_engine_tweaks\mods\QuickHack\init.lua`, `<game>\r6\scripts\QuickHack\QuickHack.reds`, and `<game>\archive\pc\mod\quickhack.archive`. `<game>` is the folder that contains `bin` and `r6`. Steam example: `C:\Program Files (x86)\Steam\steamapps\common\Cyberpunk 2077`.
 4. If either file is missing, copy those two trees by hand into `<game>` and Deploy again.
 
 ## Manual install
 
-Copy `bin` and `r6` from this repo onto `<game>`, merging folders. Same two paths must exist.
+Copy `bin`, `r6`, and `archive` from this repo onto `<game>`, merging folders. The three confirm paths above must exist.
 
 ## Bindings
 
