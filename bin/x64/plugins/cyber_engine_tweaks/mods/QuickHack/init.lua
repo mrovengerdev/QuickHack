@@ -1,6 +1,7 @@
 local Target = require("target")
 local Cast = require("cast")
 local Hud = require("hud")
+local Stream = require("stream")
 
 local inputPrinted = {}
 local slot = 1
@@ -27,7 +28,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 30")
+  print("QuickHack ready build 31")
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -42,13 +43,21 @@ registerForEvent("onUpdate", function(dt)
   local player = Game.GetPlayer()
   if player == nil or not IsDefined(player) then
     Hud.invalidate()
+    Stream.invalidate()
     return
   end
   Hud.ensure()
   Cast.tickDilation()
   Hud.refresh()
+  Stream.tick(dt)
+end)
+
+
+registerForEvent("onDraw", function()
+  Stream.drawSettings()
 end)
 
 registerForEvent("onShutdown", function()
+  Stream.destroy()
   Hud.destroy()
 end)

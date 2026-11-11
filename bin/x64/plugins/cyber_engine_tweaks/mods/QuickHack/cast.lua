@@ -1,4 +1,5 @@
 local Target = require("target")
+local Stream = require("stream")
 
 local overlay = false
 local lastCast = {}
@@ -113,6 +114,7 @@ function Cast.tryCast(slotIndex)
     bail(slotIndex, "execute returned false")
     return
   end
+  Stream.push(command)
 end
 
 return Cast
