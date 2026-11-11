@@ -332,48 +332,15 @@ local function asEntityID(value)
 end
 
 
-local offConePrinted = false
+local HOVER_DEG = 2.0
 
-local function noteOffCone()
-  if offConePrinted then
-    return
-  end
-  local player = Game.GetPlayer()
-  if not isDefined(player) then
-    return
-  end
-  local ok, text = pcall(function()
-    return QuickHackCrosshair.AngleText(player)
-  end)
-  if ok and type(text) == "string" and text ~= "" then
-    offConePrinted = true
-    print("QuickHack: object off-cone " .. text)
-  end
-end
-
-local rayArmed = false
-local aimPrinted = false
-local awayPrinted = false
-local suppressedKey = nil
-
-local function facingDot(entity)
-  local player = Game.GetPlayer()
-  local ok, dot = pcall(function()
-    return QuickHackAim.Facing(player, entity)
-  end)
-  if not ok or type(dot) ~= "number" or dot <= -1.5 then
-    return nil
-  end
-  return dot
-end
-
-local function crosshairAny()
+local function lookAtObject()
   local player = Game.GetPlayer()
   if not isDefined(player) then
     return nil
   end
   local ok, entity = pcall(function()
-    return QuickHackCrosshair.Target(player)
+    return QuickHackAim.LookAt(player)
   end)
   if not ok or not isDefined(entity) then
     return nil
@@ -381,86 +348,63 @@ local function crosshairAny()
   return resolveHackable(entity)
 end
 
-local function showEntity(entity, fallbackKey)
-  local list = fillList(entity)
-  if list == nil then
+local function closestObject()
+  local player = Game.GetPlayer()
+  if not isDefined(player) then
+    return nil, 999
+  end
+  local okEntity, entity = pcall(function()
+    return QuickHackCrosshair.Closest(player)
+  end)
+  local okAngle, angle = pcall(function()
+    return QuickHackCrosshair.ClosestAngle(player)
+  end)
+  if not okAngle or type(angle) ~= "number" then
+    angle = 999
+  end
+  if not okEntity or not isDefined(entity) then
+    return nil, angle
+  end
+  return resolveHackable(entity), angle
+end
+
+local function hoveredNow()
+  local looked = lookAtObject()
+  local cross, angle = closestObject()
+  local lookKey = entityIdKey(looked)
+  local crossKey = entityIdKey(cross)
+  if lookKey ~= nil and lookKey == crossKey then
+    return looked
+  end
+  if isDefined(cross) and angle <= HOVER_DEG then
+    return cross
+  end
+  if isDefined(looked) and not isDefined(cross) then
+    return looked
+  end
+  return nil
+end
+
+local function acquire(entity)
+  if not isDefined(entity) or sameEntity(entity, Game.GetPlayer()) or not accept(entity) then
+    if hoveredKey ~= nil or #commands > 0 then
+      clearAll()
+    end
     return false
   end
-  hoveredKey = entityIdKey(entity) or fallbackKey
-  hoveredEntity = entity
-  targetId = hoveredKey
-  commands = list
-  generation = generation + 1
-  nextFillAt = os.clock() + 0.25
-  return true
+  local key = entityIdKey(entity)
+  if key == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
+    return true
+  end
+  if showEntity(entity, key) then
+    return true
+  end
+  clearAll()
+  return false
 end
 
 function Target.onHoverId(value)
-  local cross = crosshairAny()
-  local crossKind = kindOf(cross)
-  if crossKind == "device" or crossKind == "vehicle" then
-    local deviceKey = entityIdKey(cross)
-    local dot = facingDot(cross)
-    if dot ~= nil and dot >= 0.2 then
-      rayArmed = true
-      suppressedKey = nil
-      if not aimPrinted then
-        aimPrinted = true
-        print(string.format("QuickHack: aim dot=%.2f", dot))
-      end
-    elseif dot ~= nil and not aimPrinted then
-      aimPrinted = true
-      print(string.format("QuickHack: aim dot=%.2f unarmed", dot))
-    end
-    if rayArmed and dot ~= nil and dot < 0 then
-      suppressedKey = deviceKey
-      if not awayPrinted then
-        awayPrinted = true
-        print(string.format("QuickHack: look-away dot=%.2f", dot))
-      end
-      clearAll()
-    elseif deviceKey == suppressedKey and (dot == nil or dot < 0.2) then
-      clearAll()
-    elseif deviceKey == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
-      return
-    elseif showEntity(cross, deviceKey) then
-      return
-    end
-  elseif kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle" then
-    noteOffCone()
-    clearAll()
-  end
-  if kindOf(hoveredEntity) == "device" or kindOf(hoveredEntity) == "vehicle" then
-    clearAll()
-  end
-  if value == nil then
-    clearAll()
-    return
-  end
-  local eid = asEntityID(value)
-  if eid == nil then
-    return
-  end
-  if eid.hash == nil or eid.hash == 0 then
-    clearAll()
-    return
-  end
-  local key = tostring(eid.hash)
-  if key == hoveredKey and isDefined(hoveredEntity) and #commands > 0 then
-    return
-  end
-  local entity = resolveHackable(findEntity(eid))
-  if not isDefined(entity) or sameEntity(entity, Game.GetPlayer()) then
-    clearAll()
-    return
-  end
-  if kindOf(entity) == "device" or kindOf(entity) == "vehicle" then
-    clearAll()
-    return
-  end
-  if not showEntity(entity, key) then
-    clearAll()
-  end
+  acquire(hoveredNow())
 end
 
 function Target.install()
@@ -500,58 +444,13 @@ function Target.tick(dt)
     fillWindowStart = now
   end
 
-  local hoverOk, hoverValue = pcall(function()
-    local function definedId(eid)
-      return eid ~= nil and eid.hash ~= nil and eid.hash ~= 0
-    end
-    local function readId(board, id)
-      local ok, eid = pcall(function()
-        return board:GetEntityID(id)
-      end)
-      if ok and definedId(eid) then
-        return eid
-      end
-      local variantOk, variant = pcall(function()
-        return board:GetVariant(id)
-      end)
-      if variantOk then
-        local unwrapped = asEntityID(variant)
-        if definedId(unwrapped) then
-          return unwrapped
-        end
-      end
-      return nil
-    end
-
-    local nameDefs = Game.GetAllBlackboardDefs().UI_NameplateData
-    local named = readId(Game.GetBlackboardSystem():Get(nameDefs), nameDefs.EntityID)
-    if definedId(named) then
-      local namedEntity = resolveHackable(findEntity(named))
-      if kindOf(namedEntity) == "puppet" and accept(namedEntity) then
-        return named
-      end
-    end
-    local lookDefs = Game.GetAllBlackboardDefs().UI_TargetingInfo
-    local looked = readId(Game.GetBlackboardSystem():Get(lookDefs), lookDefs.CurrentVisibleTarget)
-    if definedId(looked) then
-      local lookedEntity = resolveHackable(findEntity(looked))
-      if kindOf(lookedEntity) == "puppet" and accept(lookedEntity) then
-        return looked
-      end
-    end
-    return nil
-  end)
-  if hoverOk then
-    Target.onHoverId(hoverValue)
-  end
-
   if hidden() then
     nextFillAt = 0
     clearDisplay()
     return
   end
 
-  if not isDefined(hoveredEntity) then
+  if not acquire(hoveredNow()) then
     return
   end
   if now >= nextFillAt then

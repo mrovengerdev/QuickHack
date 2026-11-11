@@ -46,7 +46,7 @@ This mod does not hard-bind 1-9. Bindings are CET Inputs, not Hotkeys. Inputs st
 Load a save with a cyberdeck, on foot, not in a menu. Bind at least `Quickhack 1`.
 
 1. Look at a hostile netrunner or a hackable device. Within one look, the game's quickhack icons (same art as the vanilla hack list, not colored squares) appear at bottom center. The scanner does not need to be held.
-2. Look at the floor. The bar disappears when the game's nameplate target clears, not on a separate scan.
+2. Look at the floor. The bar disappears as soon as the cursor is no longer over the object.
 3. Look at a target with few hacks, then one with many. The 1 icon does not slide. Empty slots to the right stay empty and do not pull 1 toward center.
 4. Press the key bound to `Quickhack 1` while holding W. The vanilla upload starts on that press. Upload progress appears immediately and lasts the normal time for that hack, not zero. No scan windup before the upload starts. Holding the key does not start a second upload.
 5. A grey icon is locked (cooldown, ICE, no RAM). Its number still sits in that slot. Pressing its slot does nothing.

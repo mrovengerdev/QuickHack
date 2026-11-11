@@ -162,38 +162,43 @@ local function applyAtlas(icon, path, part, size)
 end
 
 local function applyIcon(slot, command)
-  if command == nil or command.m_icon == nil or canvas == nil then
+  if command == nil or command.m_icon == nil or slot.placeholder == nil then
     return
   end
   local key = tostring(command.m_icon)
   if key == slot.iconKey then
     return
   end
-  local ok, attached = pcall(function()
-    return QuickHackIcons.Attach(canvas, command, slot.index or 1, slot.x + 10, ICON_Y)
+  local painted = false
+  local okPaint, redsPaint = pcall(function()
+    return QuickHackIcons.Paint(slot.placeholder, command)
   end)
-  if ok and attached == true then
-    if slot.placeholder ~= nil then
-      pcall(function()
-        slot.placeholder:SetVisible(false)
-      end)
-    end
-    slot.iconKey = key
-    return
+  if okPaint and redsPaint == true then
+    painted = true
   end
   local path, part = iconStrings(command)
   if applyAtlas(slot.placeholder, path, part, ICON) then
+    painted = true
+  end
+  if painted then
     slot.icon = slot.placeholder
     slot.iconKey = key
+    pcall(function()
+      slot.placeholder:SetVisible(true)
+      slot.placeholder:SetOpacity(1.0)
+      if WHITE ~= nil then
+        slot.placeholder:SetTintColor(WHITE)
+      end
+    end)
     if not partPrinted then
       partPrinted = true
-      print("QuickHack: icon atlas fallback " .. path .. " " .. part)
+      print("QuickHack: icon painted " .. tostring(path) .. " " .. tostring(part))
     end
     return
   end
   if not imageErrorPrinted then
     imageErrorPrinted = true
-    print("QuickHack: icon attach failed " .. tostring(path) .. " " .. tostring(part))
+    print("QuickHack: icon paint failed " .. tostring(path) .. " " .. tostring(part))
   end
 end
 
@@ -349,10 +354,10 @@ local function showSlot(slot, command)
   end
   applyIcon(slot, command)
   if slot.iconKey == nil then
+    slot.placeholder:SetVisible(false)
+  else
     slot.placeholder:SetOpacity(opacity)
     slot.placeholder:SetVisible(true)
-  else
-    slot.placeholder:SetVisible(false)
   end
   paintRam(slot, command)
 end
@@ -415,6 +420,8 @@ local function build()
     local icon = inkImage.new()
     icon:SetAnchor(inkEAnchor.TopLeft)
     place(icon, x + 10, ICON_Y, ICON, ICON)
+    icon:SetFitToContent(false)
+    icon:SetTintColor(WHITE)
     icon:SetVisible(false)
     icon:Reparent(canvas, -1)
 

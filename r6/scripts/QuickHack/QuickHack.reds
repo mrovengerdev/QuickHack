@@ -64,6 +64,40 @@ public class QuickHackCrosshair extends IScriptable {
     return component.GetEntity() as GameObject;
   }
 
+  public final static func Closest(player: ref<GameObject>) -> ref<GameObject> {
+    let angleDistance: EulerAngles;
+    let component: wref<TargetingComponent>;
+    let searchQuery: TargetSearchQuery;
+    if !IsDefined(player) {
+      return null;
+    };
+    TargetSearchQuery.SetComponentFilter(searchQuery, TargetComponentFilterType.QuickHack);
+    searchQuery.searchFilter = TSF_Quickhackable();
+    searchQuery.maxDistance = SNameplateRangesData.GetMaxDisplayRange();
+    component = GameInstance.GetTargetingSystem(player.GetGame()).GetComponentClosestToCrosshair(player, angleDistance, searchQuery) as TargetingComponent;
+    if !IsDefined(component) {
+      return null;
+    };
+    return component.GetEntity() as GameObject;
+  }
+
+  public final static func ClosestAngle(player: ref<GameObject>) -> Float {
+    let angleDistance: EulerAngles;
+    let component: wref<TargetingComponent>;
+    let searchQuery: TargetSearchQuery;
+    if !IsDefined(player) {
+      return 999.00;
+    };
+    TargetSearchQuery.SetComponentFilter(searchQuery, TargetComponentFilterType.QuickHack);
+    searchQuery.searchFilter = TSF_Quickhackable();
+    searchQuery.maxDistance = SNameplateRangesData.GetMaxDisplayRange();
+    component = GameInstance.GetTargetingSystem(player.GetGame()).GetComponentClosestToCrosshair(player, angleDistance, searchQuery) as TargetingComponent;
+    if !IsDefined(component) {
+      return 999.00;
+    };
+    return MaxF(AbsF(angleDistance.Yaw), AbsF(angleDistance.Pitch));
+  }
+
   public final static func AngleText(player: ref<GameObject>) -> String {
     let angleDistance: EulerAngles;
     let component: wref<TargetingComponent>;
@@ -83,6 +117,18 @@ public class QuickHackCrosshair extends IScriptable {
 }
 
 public class QuickHackAim extends IScriptable {
+  public final static func LookAt(player: ref<GameObject>) -> ref<GameObject> {
+    let looked: ref<GameObject>;
+    if !IsDefined(player) {
+      return null;
+    };
+    looked = GameInstance.GetTargetingSystem(player.GetGame()).GetLookAtObject(player, true, true);
+    if IsDefined(looked) {
+      return looked;
+    };
+    return GameInstance.GetTargetingSystem(player.GetGame()).GetLookAtObject(player, true, false);
+  }
+
   public final static func Facing(player: ref<GameObject>, entity: ref<GameObject>) -> Float {
     let origin: Vector4;
     let forward: Vector4;
@@ -209,6 +255,23 @@ public class QuickHackIcons extends IScriptable {
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
     InkImageUtils.RequestSetImage(null, image, command.m_icon);
+    return true;
+  }
+
+  public final static func Paint(image: wref<inkImage>, command: ref<QuickhackData>) -> Bool {
+    let record: wref<UIIcon_Record>;
+    if !IsDefined(image) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return false;
+    };
+    record = TweakDBInterface.GetUIIconRecord(command.m_icon);
+    if !IsDefined(record) {
+      return false;
+    };
+    image.SetVisible(true);
+    image.SetFitToContent(false);
+    image.SetSize(new Vector2(56.00, 56.00));
+    image.SetAtlasResource(record.AtlasResourcePath());
+    image.SetTexturePart(record.AtlasPartName());
     return true;
   }
 }
