@@ -259,7 +259,7 @@ local function create()
 
   local function thermAcpi(title)
     return fit({
-      "  ACPI  \_TZ.CPU0  " .. banner(title),
+      "  ACPI  \\_TZ.CPU0  " .. banner(title),
       "  pid " .. pid() .. "  ev  0x80  thermal",
       "  sensor  0  " .. tostring(100 + math.random(0, 20)) .. "C  crit",
       "  sensor  1  " .. tostring(90 + math.random(0, 20)) .. "C  warn",
