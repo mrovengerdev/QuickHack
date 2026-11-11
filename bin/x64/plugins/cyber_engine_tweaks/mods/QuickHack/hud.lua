@@ -36,6 +36,7 @@ local hostRetry = false
 local barHostPrinted = false
 local spawnPrinted = false
 local libPrinted = false
+local checkPrinted = false
 local spawnFailPrinted = false
 local inkSpawner = nil
 local spawnerPrinted = false
@@ -206,10 +207,23 @@ local function applyAtlas(icon, path, part, size)
 end
 
 local function applyIcon(slot, command)
-  if command == nil or command.m_icon == nil or canvas == nil then
+  if command == nil or canvas == nil then
     return
   end
-  local key = tostring(command.m_icon)
+  local okKey, key = pcall(function()
+    return QuickHackIcons.DebugOf(command)
+  end)
+  if not okKey or key == nil then
+    key = "error " .. tostring(key)
+  end
+  key = tostring(key)
+  if not checkPrinted then
+    checkPrinted = true
+    print("QuickHack: icon check " .. key)
+  end
+  if string.sub(key, 1, 5) == "error" or key == "no-command" or key == "icon-id-invalid" or key == "no-uiicon-record" then
+    return
+  end
   if key == slot.iconKey and slot.icon ~= nil then
     return
   end
