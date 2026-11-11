@@ -125,8 +125,37 @@ local function copyCommands(src)
   if src == nil then
     return list
   end
+  local function isPlaceholder(entry)
+    if not entry then
+      return true
+    end
+    local ok, reds = pcall(function()
+      return QuickHackIcons.IsPlaceholder(entry)
+    end)
+    if ok and reds == true then
+      return true
+    end
+    if entry.m_noQuickhackData or entry.noQuickhackData then
+      return true
+    end
+    local title = ""
+    local okTitle, redsTitle = pcall(function()
+      return QuickHackIcons.TitleOf(entry)
+    end)
+    if okTitle and redsTitle ~= nil then
+      title = tostring(redsTitle)
+    end
+    title = string.upper(title)
+    if string.find(title, "NO COMPATIBLE", 1, true) ~= nil then
+      return true
+    end
+    if string.find(title, "NO QUICKHACK", 1, true) ~= nil then
+      return true
+    end
+    return false
+  end
   local function push(entry)
-    if entry and not entry.m_noQuickhackData then
+    if entry and not isPlaceholder(entry) then
       list[#list + 1] = entry
     end
   end

@@ -257,6 +257,24 @@ public class QuickHackIcons extends IScriptable {
     return "";
   }
 
+  public final static func IsPlaceholder(command: ref<QuickhackData>) -> Bool {
+    let title: String;
+    if !IsDefined(command) {
+      return true;
+    };
+    if command.m_noQuickhackData {
+      return true;
+    };
+    title = QuickHackIcons.TitleOf(command);
+    if StrFindFirst(title, "NO COMPATIBLE") >= 0 || StrFindFirst(title, "No Compatible") >= 0 || StrFindFirst(title, "no compatible") >= 0 {
+      return true;
+    };
+    if StrFindFirst(command.m_title, "NO COMPATIBLE") >= 0 || StrFindFirst(command.m_titleAlternative, "NO COMPATIBLE") >= 0 {
+      return true;
+    };
+    return false;
+  }
+
   public final static func Attach(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float) -> Bool {
     let canvas: ref<inkCanvas>;
     let image: ref<inkImage>;
@@ -343,15 +361,27 @@ public class QuickHackIcons extends IScriptable {
     return true;
   }
 
-  public final static func MakeBar(controller: wref<inkGameController>, width: Float, height: Float, bottom: Float) -> wref<inkCanvas> {
-    let root: wref<inkCompoundWidget>;
+  public final static func PlaceBottom(widget: wref<inkWidget>, left: Float, bottom: Float, size: Float) -> Bool {
+    let margin: inkMargin;
+    if !IsDefined(widget) {
+      return false;
+    };
+    widget.SetAnchor(inkEAnchor.BottomCenter);
+    widget.SetAnchorPoint(new Vector2(0.00, 1.00));
+    widget.SetSize(new Vector2(size, size));
+    margin.left = left;
+    margin.top = 0.00;
+    margin.right = 0.00;
+    margin.bottom = bottom;
+    widget.SetMargin(margin);
+    widget.SetVisible(true);
+    return true;
+  }
+
+  public final static func MakeBarOn(root: wref<inkCompoundWidget>, width: Float, height: Float, bottom: Float) -> wref<inkCanvas> {
     let existing: wref<inkWidget>;
     let bar: ref<inkCanvas>;
     let margin: inkMargin;
-    if !IsDefined(controller) {
-      return null;
-    };
-    root = controller.GetRootCompoundWidget();
     if !IsDefined(root) {
       return null;
     };
@@ -372,6 +402,13 @@ public class QuickHackIcons extends IScriptable {
     bar.SetVisible(false);
     bar.Reparent(root, -1);
     return bar;
+  }
+
+  public final static func MakeBar(controller: wref<inkGameController>, width: Float, height: Float, bottom: Float) -> wref<inkCanvas> {
+    if !IsDefined(controller) {
+      return null;
+    };
+    return QuickHackIcons.MakeBarOn(controller.GetRootCompoundWidget(), width, height, bottom);
   }
 
   public final static func PaintSlot(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float, owner: wref<IScriptable>) -> Bool {

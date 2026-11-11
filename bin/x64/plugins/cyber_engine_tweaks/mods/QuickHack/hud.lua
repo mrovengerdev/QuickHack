@@ -13,6 +13,7 @@ local SLOT_W = 76
 local STRIDE = 84
 local BAR_W = 748
 local BAR_H = 114
+local BAR_BOTTOM = 128.0
 local NUMBER_TINT = nil
 local WHITE = nil
 local RED = nil
@@ -38,6 +39,7 @@ local spawnPrinted = false
 local spawnFailPrinted = false
 local inkSpawner = nil
 local spawnerPrinted = false
+local hostFromSpawner = false
 
 local function screenX(widget)
   local ok, pos = pcall(function()
@@ -105,10 +107,80 @@ local function makeText(x, y, w, h, size, tint, text)
   label:SetFontSize(size)
   label:SetTintColor(tint)
   label:SetHorizontalAlignment(textHorizontalAlignment.Center)
+  pcall(function()
+    label.textOverflowPolicy = textOverflowPolicy.DotsEnd
+  end)
+  pcall(function()
+    label:SetWrapping(false, w)
+  end)
+  pcall(function()
+    label:SetWrappingAtPosition(w)
+  end)
   label:SetText(text)
   label:SetVisible(false)
   label:Reparent(canvas, -1)
   return label
+end
+
+local function estimateTextWidth(text, fontSize)
+  local width = 0
+  local i = 1
+  while i <= #text do
+    local c = string.sub(text, i, i)
+    if c == " " or c == "." then
+      width = width + fontSize * 0.30
+    elseif string.match(c, "%u") then
+      width = width + fontSize * 0.62
+    else
+      width = width + fontSize * 0.50
+    end
+    i = i + 1
+  end
+  return width
+end
+
+local function fitTitle(label, text, maxW)
+  if label == nil then
+    return
+  end
+  text = text or ""
+  pcall(function()
+    label.textOverflowPolicy = textOverflowPolicy.DotsEnd
+  end)
+  pcall(function()
+    label:SetWrapping(false, maxW)
+  end)
+  pcall(function()
+    label:SetWrappingAtPosition(maxW)
+  end)
+  local size = 13
+  pcall(function()
+    local fontSize = label:GetFontSize()
+    if type(fontSize) == "number" then
+      size = fontSize
+    end
+  end)
+  if estimateTextWidth(text, size) <= maxW then
+    label:SetText(text)
+    return
+  end
+  local lo = 1
+  local hi = #text
+  local best = "..."
+  while lo <= hi do
+    local mid = math.floor((lo + hi) / 2)
+    local candidate = string.sub(text, 1, mid) .. "..."
+    if estimateTextWidth(candidate, size) <= maxW then
+      best = candidate
+      lo = mid + 1
+    else
+      hi = mid - 1
+    end
+  end
+  if best == "..." and #text > 0 then
+    best = string.sub(text, 1, 1) .. "..."
+  end
+  label:SetText(best)
 end
 
 local function optionText(command)
@@ -204,6 +276,51 @@ local function applyAtlas(icon, path, part, size)
   return ok
 end
 
+local function iconLeft(slot)
+  return (slot.x + 10) - (BAR_W * 0.5)
+end
+
+local function iconBottom()
+  return BAR_BOTTOM + BAR_H - ICON_Y - ICON
+end
+
+local function findNamed(parent, name)
+  if parent == nil then
+    return nil
+  end
+  local ok, widget = pcall(function()
+    return parent:GetWidget(CName.new(name))
+  end)
+  if ok then
+    return widget
+  end
+  return nil
+end
+
+local function placeHostIcon(widget, slot)
+  if widget == nil then
+    return false
+  end
+  local ok = pcall(function()
+    return QuickHackIcons.PlaceBottom(widget, iconLeft(slot), iconBottom(), ICON)
+  end)
+  if ok then
+    return true
+  end
+  return pcall(function()
+    widget:SetAnchor(inkEAnchor.BottomCenter)
+    widget:SetAnchorPoint(Vector2.new({ X = 0.0, Y = 1.0 }))
+    widget:SetMargin(inkMargin.new({
+      left = iconLeft(slot),
+      top = 0.0,
+      right = 0.0,
+      bottom = iconBottom(),
+    }))
+    widget:SetSize(Vector2.new({ X = ICON, Y = ICON }))
+    widget:SetVisible(true)
+  end)
+end
+
 local function applyIcon(slot, command)
   if command == nil or command.m_icon == nil or canvas == nil then
     return
@@ -214,7 +331,57 @@ local function applyIcon(slot, command)
   end
   local painted = false
   local spawner = inkSpawner or inkController
-  if spawner ~= nil then
+  local name = "qhicon" .. tostring(slot.index)
+
+  if spawner ~= nil and inkHost ~= nil then
+    local okSpawn, redsSpawn = pcall(function()
+      return QuickHackIcons.SpawnSlot(spawner, inkHost, command, slot.index, 0, 0, ICON)
+    end)
+    if okSpawn and redsSpawn == true then
+      local widget = findNamed(inkHost, name)
+      if widget == nil then
+        widget = findNamed(inkHost, "qhspawn" .. tostring(slot.index))
+      end
+      if widget ~= nil and placeHostIcon(widget, slot) then
+        painted = true
+        slot.icon = widget
+        slot.spawned = widget
+        if WHITE ~= nil then
+          pcall(function()
+            slot.icon:SetTintColor(WHITE)
+            slot.icon:SetOpacity(1.0)
+            slot.icon:SetVisible(true)
+          end)
+        end
+        if not spawnPrinted then
+          spawnPrinted = true
+          print("QuickHack: icon spawned on live HUD host")
+        end
+      end
+    elseif okSpawn ~= true and not spawnPrinted then
+      spawnPrinted = true
+      print("QuickHack: icon spawn error: " .. tostring(redsSpawn))
+    end
+    if not painted then
+      local okPaint, redsPaint = pcall(function()
+        return QuickHackIcons.PaintSlot(inkHost, command, slot.index, 0, 0, ICON, spawner)
+      end)
+      if okPaint and redsPaint == true then
+        local widget = findNamed(inkHost, name)
+        if widget ~= nil and placeHostIcon(widget, slot) then
+          painted = true
+          slot.icon = widget
+          slot.spawned = widget
+          if not spawnPrinted then
+            spawnPrinted = true
+            print("QuickHack: icon painted on live HUD host")
+          end
+        end
+      end
+    end
+  end
+
+  if not painted and spawner ~= nil then
     local okSpawn, redsSpawn = pcall(function()
       return QuickHackIcons.SpawnSlot(spawner, canvas, command, slot.index, slot.x + 10, ICON_Y, ICON)
     end)
@@ -268,7 +435,7 @@ local function applyIcon(slot, command)
     end
     local path, part = iconStrings(command)
     if (path == nil or path == "") and part ~= nil and part ~= "" and part ~= "None" then
-      path = "base\\gameplay\\gui\\common\\icons\\quickhacks_icons.inkatlas"
+      path = "base\gameplay\gui\common\icons\quickhacks_icons.inkatlas"
     end
     if applyAtlas(slot.placeholder, path, part, ICON) then
       painted = true
@@ -291,6 +458,9 @@ local function applyIcon(slot, command)
       local host = "no-host"
       if hosted then
         host = "hosted"
+      end
+      if inkHost ~= nil then
+        host = host .. "-layer"
       end
       print("QuickHack: icon painted " .. tostring(path) .. " " .. tostring(part) .. " " .. tostring(dbg) .. " " .. host)
     end
@@ -413,13 +583,29 @@ local function hideSlot(slot)
     end)
     slot.slotCanvas = nil
   end
-  if canvas ~= nil and slot.index ~= nil then
+  local function removeNamed(parent, name)
+    if parent == nil or name == nil then
+      return
+    end
     pcall(function()
-      local old = canvas:GetWidget(CName.new("qhslot" .. tostring(slot.index)))
+      local old = parent:GetWidget(CName.new(name))
       if old ~= nil then
-        canvas:RemoveChild(old)
+        parent:RemoveChild(old)
       end
     end)
+  end
+  if slot.index ~= nil then
+    local names = {
+      "qhslot" .. tostring(slot.index),
+      "qhicon" .. tostring(slot.index),
+      "qhspawn" .. tostring(slot.index),
+    }
+    local n = 1
+    while n <= #names do
+      removeNamed(canvas, names[n])
+      removeNamed(inkHost, names[n])
+      n = n + 1
+    end
   end
   slot.icon = slot.placeholder
   slot.iconKey = nil
@@ -438,12 +624,13 @@ local function hideSlot(slot)
 end
 
 local function showSlot(slot, command)
-  local opacity = command.m_isLocked and 0.4 or 1.0
+  local locked = command.m_isLocked or command.isLocked
+  local opacity = locked and 0.4 or 1.0
   slot.number:SetOpacity(1.0)
   slot.title:SetOpacity(opacity)
   slot.number:SetVisible(true)
   slot.title:SetVisible(true)
-  slot.title:SetText(optionText(command))
+  fitTitle(slot.title, optionText(command), SLOT_W)
   if slot.edges ~= nil then
     local edge = 1
     while slot.edges[edge] ~= nil do
@@ -493,9 +680,19 @@ local function build()
   canvas = nil
   parent = nil
   hosted = false
-  if inkController ~= nil then
+  if inkHost ~= nil then
     local okBar, bar = pcall(function()
-      return QuickHackIcons.MakeBar(inkController, BAR_W, BAR_H, 128.0)
+      return QuickHackIcons.MakeBarOn(inkHost, BAR_W, BAR_H, BAR_BOTTOM)
+    end)
+    if okBar and bar ~= nil then
+      canvas = bar
+      parent = inkHost
+      hosted = true
+    end
+  end
+  if canvas == nil and inkController ~= nil then
+    local okBar, bar = pcall(function()
+      return QuickHackIcons.MakeBar(inkController, BAR_W, BAR_H, BAR_BOTTOM)
     end)
     if okBar and bar ~= nil then
       canvas = bar
@@ -513,7 +710,7 @@ local function build()
     canvas:SetName(CName.new("quickhack_bar"))
     canvas:SetAnchor(inkEAnchor.BottomCenter)
     canvas:SetAnchorPoint(Vector2.new({ X = 0.5, Y = 1.0 }))
-    canvas:SetMargin(inkMargin.new({ left = 0.0, top = 0.0, right = 0.0, bottom = 128.0 }))
+    canvas:SetMargin(inkMargin.new({ left = 0.0, top = 0.0, right = 0.0, bottom = BAR_BOTTOM }))
     canvas:SetSize(Vector2.new({ X = BAR_W, Y = BAR_H }))
     canvas:SetVisible(false)
     local host = window
@@ -599,6 +796,53 @@ local function build()
   return true
 end
 
+local function parentOf(widget)
+  if widget == nil then
+    return nil
+  end
+  local ok, parent = pcall(function()
+    return widget:GetParentWidget()
+  end)
+  if ok and parent ~= nil then
+    return parent
+  end
+  ok, parent = pcall(function()
+    return widget:GetParent()
+  end)
+  if ok and parent ~= nil then
+    return parent
+  end
+  ok, parent = pcall(function()
+    return widget.parentWidget
+  end)
+  if ok and parent ~= nil then
+    return parent
+  end
+  return nil
+end
+
+local function layerRoot(controller)
+  if controller == nil then
+    return nil
+  end
+  local ok, current = pcall(function()
+    return controller:GetRootCompoundWidget()
+  end)
+  if not ok or current == nil then
+    return nil
+  end
+  local i = 1
+  while i <= 16 and current ~= nil do
+    local parent = parentOf(current)
+    if parent == nil or parent == current then
+      break
+    end
+    current = parent
+    i = i + 1
+  end
+  return current
+end
+
 local function bindHud()
   pcall(function()
     local layer = Game.GetInkSystem():GetLayer(CName.new("inkHUDLayer"))
@@ -613,9 +857,11 @@ local function bindHud()
       return
     end
     inkController = ctrl
-    pcall(function()
-      inkHost = ctrl:GetRootCompoundWidget()
-    end)
+    if not hostFromSpawner then
+      pcall(function()
+        inkHost = ctrl:GetRootCompoundWidget()
+      end)
+    end
     if not hostPrinted then
       hostPrinted = true
       local name = ""
@@ -662,6 +908,12 @@ local function captureSpawner(this)
     return
   end
   inkSpawner = this
+  local root = layerRoot(this)
+  if root ~= nil then
+    inkHost = root
+    hostFromSpawner = true
+    adoptHost()
+  end
   if not spawnerPrinted then
     spawnerPrinted = true
     local name = ""
@@ -671,7 +923,11 @@ local function captureSpawner(this)
     if name == "" then
       name = tostring(this)
     end
-    print("QuickHack: icon spawner bound " .. name)
+    if hostFromSpawner then
+      print("QuickHack: icon spawner bound " .. name .. " (layer root host)")
+    else
+      print("QuickHack: icon spawner bound " .. name)
+    end
   end
 end
 
