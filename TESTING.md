@@ -4,11 +4,12 @@ Mod for Cyberpunk 2077 2.5 and Cyber Engine Tweaks 1.38.1. Looking at a hackable
 
 ## Requirements
 
-Install with Vortex before this mod. Each native plugin must be a 2.5 build. Codeware is not required.
+Install with Vortex before this mod. Each native plugin must be a 2.5 build.
 
 1. RED4ext. Loads CET. This mod ships no native plugin.
 2. redscript. Compiles `QuickHack.reds` so Lua can call private `TranslateChoicesIntoQuickSlotCommands` through `QuickHack_FillCommands`.
 3. Cyber Engine Tweaks 1.38.1. Lua host, ink bar, and the bindings menu.
+4. [Codeware](https://www.nexusmods.com/cyberpunk2077/mods/7780) 1.21 or later, for game patch 2.5. Required to spawn the quickhack icon widgets. This zip does not include Codeware; install it separately, then this mod.
 
 Launch the game once so redscript finishes its first compile, then quit.
 
@@ -39,7 +40,7 @@ This mod does not hard-bind 1-9. Bindings are CET Inputs, not Hotkeys. Inputs st
 
 1. CET console must contain `QuickHack ready`.
 2. It must not contain `nameplate hook failed` or `QuickHack_FillCommands failed`.
-3. If redscript failed, open `<game>\r6\logs\` and read the newest `redscript_rCURRENT.log`. Fix the compile error before testing gameplay. Reload mods from the CET overlay after Lua edits. Restart the game after `.reds` edits.
+3. If redscript failed, confirm [Codeware](https://www.nexusmods.com/cyberpunk2077/mods/7780) 1.21 or later is installed and enabled, then open `<game>\r6\logs\` and read the newest `redscript_rCURRENT.log`. Fix the compile error before testing gameplay. Reload mods from the CET overlay after Lua edits. Restart the game after `.reds` edits.
 
 ## Gameplay checks
 

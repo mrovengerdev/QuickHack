@@ -213,8 +213,21 @@ local function applyIcon(slot, command)
     return
   end
   local painted = false
+  local okCW, redsCW = pcall(function()
+    return QuickHackIcons.SpawnCodewareSlot(canvas, command, slot.index, slot.x + 10, ICON_Y, ICON, inkController or inkSpawner)
+  end)
+  if okCW and redsCW == true then
+    painted = true
+    if not spawnPrinted then
+      spawnPrinted = true
+      print("QuickHack: icon spawned with Codeware")
+    end
+  elseif okCW ~= true and not spawnPrinted then
+    spawnPrinted = true
+    print("QuickHack: Codeware icon spawn error: " .. tostring(redsCW))
+  end
   local spawner = inkSpawner or inkController
-  if spawner ~= nil then
+  if not painted and spawner ~= nil then
     local okSpawn, redsSpawn = pcall(function()
       return QuickHackIcons.SpawnSlot(spawner, canvas, command, slot.index, slot.x + 10, ICON_Y, ICON)
     end)
@@ -415,9 +428,14 @@ local function hideSlot(slot)
   end
   if canvas ~= nil and slot.index ~= nil then
     pcall(function()
-      local old = canvas:GetWidget(CName.new("qhslot" .. tostring(slot.index)))
-      if old ~= nil then
-        canvas:RemoveChild(old)
+      local names = { "qhslot", "qhspawn", "qhicon" }
+      local n = 1
+      while names[n] ~= nil do
+        local old = canvas:GetWidget(CName.new(names[n] .. tostring(slot.index)))
+        if old ~= nil and old ~= slot.placeholder then
+          canvas:RemoveChild(old)
+        end
+        n = n + 1
       end
     end)
   end

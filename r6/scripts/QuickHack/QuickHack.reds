@@ -635,8 +635,85 @@ public class QuickHackIcons extends IScriptable {
     };
     return false;
   }
+
+  public final static func SpawnCodewareSlot(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float, owner: wref<IScriptable>) -> Bool {
+    let old: wref<inkWidget>;
+    let icon: ref<QuickHackSlotIcon>;
+    if !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return false;
+    };
+    old = parent.GetWidget(StringToName("qhspawn" + IntToString(slot)));
+    if IsDefined(old) {
+      parent.RemoveChild(old);
+    };
+    old = parent.GetWidget(StringToName("qhicon" + IntToString(slot)));
+    if IsDefined(old) {
+      parent.RemoveChild(old);
+    };
+    icon = new QuickHackSlotIcon();
+    icon.Reparent(parent);
+    icon.Layout(slot, x, y, size);
+    return icon.Apply(command, owner);
+  }
 }
 
+public class QuickHackSlotIcon extends inkComponent {
+  private let m_image: wref<inkImage>;
+
+  protected cb func OnCreate() -> ref<inkWidget> {
+    let root: ref<inkCanvas>;
+    let image: ref<inkImage>;
+    root = new inkCanvas();
+    root.SetName(n"qhspawn");
+    root.SetAnchor(inkEAnchor.TopLeft);
+    root.SetFitToContent(false);
+    root.SetVisible(true);
+    root.SetOpacity(1.00);
+    image = new inkImage();
+    image.SetName(n"icon");
+    image.SetAnchor(inkEAnchor.Fill);
+    image.SetAnchorPoint(new Vector2(0.50, 0.50));
+    image.SetFitToContent(false);
+    image.SetVisible(true);
+    image.SetOpacity(1.00);
+    image.SetActiveTextureType(inkTextureType.StaticTexture);
+    image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
+    image.Reparent(root);
+    this.m_image = image;
+    return root;
+  }
+
+  public func Layout(slot: Int32, x: Float, y: Float, size: Float) -> Void {
+    let root: wref<inkWidget>;
+    let margin: inkMargin;
+    root = this.GetRootWidget();
+    if !IsDefined(root) {
+      return;
+    };
+    root.SetName(StringToName("qhspawn" + IntToString(slot)));
+    root.SetSize(new Vector2(size, size));
+    margin.left = x;
+    margin.top = y;
+    margin.right = 0.00;
+    margin.bottom = 0.00;
+    root.SetMargin(margin);
+    root.SetVisible(true);
+    if IsDefined(this.m_image) {
+      this.m_image.SetName(StringToName("qhicon" + IntToString(slot)));
+      this.m_image.SetSize(new Vector2(size, size));
+      this.m_image.SetVisible(true);
+      this.m_image.SetOpacity(1.00);
+    };
+  }
+
+  public func Apply(command: ref<QuickhackData>, owner: wref<IScriptable>) -> Bool {
+    if !IsDefined(this.m_image) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return false;
+    };
+    QuickHackIcons.RequestIcon(this.m_image, command.m_icon, owner);
+    return true;
+  }
+}
 
 public class QuickHackCast extends IScriptable {
   public final static func Execute(player: ref<GameObject>, command: ref<QuickhackData>) -> Bool {
