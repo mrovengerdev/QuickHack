@@ -53,7 +53,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 47")
+  print("QuickHack ready build 48")
 end)
 
 registerForEvent("onOverlayOpen", function()
