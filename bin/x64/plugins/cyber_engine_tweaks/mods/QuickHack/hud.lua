@@ -30,6 +30,8 @@ local partEmptyPrinted = false
 local partPrinted = false
 local inkController = nil
 local inkHost = nil
+local hosted = false
+local hostPrinted = false
 
 local function screenX(widget)
   local ok, pos = pcall(function()
@@ -164,27 +166,50 @@ local function applyAtlas(icon, path, part, size)
 end
 
 local function applyIcon(slot, command)
-  if command == nil or command.m_icon == nil or slot.placeholder == nil then
+  if command == nil or command.m_icon == nil or canvas == nil then
     return
   end
   local key = tostring(command.m_icon)
-  if key == slot.iconKey then
+  if key == slot.iconKey and slot.icon ~= nil then
     return
   end
   local painted = false
   local okPaint, redsPaint = pcall(function()
-    return QuickHackIcons.PaintFor(slot.placeholder, command, inkController or Game.GetPlayer())
+    return QuickHackIcons.PaintSlot(canvas, command, slot.index, slot.x + 10, ICON_Y, ICON, inkController)
   end)
   if okPaint and redsPaint == true then
     painted = true
+    pcall(function()
+      local widget = canvas:GetWidget(CName.new("qhicon" .. tostring(slot.index)))
+      if widget ~= nil then
+        slot.icon = widget
+        if WHITE ~= nil then
+          slot.icon:SetTintColor(WHITE)
+        end
+        slot.icon:SetOpacity(1.0)
+        slot.icon:SetVisible(true)
+      end
+    end)
+  end
+  if not painted and slot.placeholder ~= nil then
+    local okOld, redsOld = pcall(function()
+      return QuickHackIcons.PaintFor(slot.placeholder, command, inkController or Game.GetPlayer())
+    end)
+    if okOld and redsOld == true then
+      painted = true
+    end
+    local path, part = iconStrings(command)
+    if (path == nil or path == "") and part ~= nil and part ~= "" and part ~= "None" then
+      path = "base\\gameplay\\gui\\common\\icons\\quickhacks_icons.inkatlas"
+    end
+    if applyAtlas(slot.placeholder, path, part, ICON) then
+      painted = true
+    end
+    if painted then
+      slot.icon = slot.placeholder
+    end
   end
   local path, part = iconStrings(command)
-  if (path == nil or path == "") and part ~= nil and part ~= "" and part ~= "None" then
-    path = "base\\gameplay\\gui\\common\\icons\\quickhacks_icons.inkatlas"
-  end
-  if applyAtlas(slot.placeholder, path, part, ICON) then
-    painted = true
-  end
   local okDbg, dbg = pcall(function()
     return QuickHackIcons.DebugOf(command)
   end)
@@ -192,18 +217,14 @@ local function applyIcon(slot, command)
     dbg = tostring(dbg)
   end
   if painted then
-    slot.icon = slot.placeholder
     slot.iconKey = key
-    pcall(function()
-      slot.placeholder:SetVisible(true)
-      slot.placeholder:SetOpacity(1.0)
-      if WHITE ~= nil then
-        slot.placeholder:SetTintColor(WHITE)
-      end
-    end)
     if not partPrinted then
       partPrinted = true
-      print("QuickHack: icon painted " .. tostring(path) .. " " .. tostring(part) .. " " .. tostring(dbg))
+      local host = "no-host"
+      if hosted then
+        host = "hosted"
+      end
+      print("QuickHack: icon painted " .. tostring(path) .. " " .. tostring(part) .. " " .. tostring(dbg) .. " " .. host)
     end
     return
   end
@@ -365,10 +386,24 @@ local function showSlot(slot, command)
   end
   applyIcon(slot, command)
   if slot.iconKey == nil then
-    slot.placeholder:SetVisible(false)
+    if slot.placeholder ~= nil then
+      slot.placeholder:SetVisible(false)
+    end
+    if slot.icon ~= nil and slot.icon ~= slot.placeholder then
+      pcall(function()
+        slot.icon:SetVisible(false)
+      end)
+    end
   else
-    slot.placeholder:SetOpacity(opacity)
-    slot.placeholder:SetVisible(true)
+    if slot.icon ~= nil then
+      pcall(function()
+        slot.icon:SetOpacity(opacity)
+        slot.icon:SetVisible(true)
+      end)
+    end
+    if slot.placeholder ~= nil and slot.placeholder ~= slot.icon then
+      slot.placeholder:SetVisible(false)
+    end
   end
   paintRam(slot, command)
 end
@@ -387,16 +422,40 @@ local function build()
   WHITE = HDRColor.new({ Red = 1.0, Green = 1.0, Blue = 1.0, Alpha = 1.0 })
   RED = HDRColor.new({ Red = 1.0, Green = 0.15, Blue = 0.15, Alpha = 1.0 })
 
-  canvas = inkCanvas.new()
-  canvas:SetName(CName.new("quickhack_bar"))
-  canvas:SetAnchor(inkEAnchor.BottomCenter)
-  canvas:SetAnchorPoint(Vector2.new({ X = 0.5, Y = 1.0 }))
-  canvas:SetMargin(inkMargin.new({ left = 0.0, top = 0.0, right = 0.0, bottom = 128.0 }))
-  canvas:SetSize(Vector2.new({ X = BAR_W, Y = BAR_H }))
-  canvas:SetVisible(false)
-  local host = inkHost or window
-  canvas:Reparent(host, -1)
-  parent = host
+  canvas = nil
+  parent = nil
+  hosted = false
+  if inkController ~= nil then
+    local okBar, bar = pcall(function()
+      return QuickHackIcons.MakeBar(inkController, BAR_W, BAR_H, 128.0)
+    end)
+    if okBar and bar ~= nil then
+      canvas = bar
+      if inkHost == nil then
+        pcall(function()
+          inkHost = inkController:GetRootCompoundWidget()
+        end)
+      end
+      parent = inkHost
+      hosted = true
+    end
+  end
+  if canvas == nil then
+    canvas = inkCanvas.new()
+    canvas:SetName(CName.new("quickhack_bar"))
+    canvas:SetAnchor(inkEAnchor.BottomCenter)
+    canvas:SetAnchorPoint(Vector2.new({ X = 0.5, Y = 1.0 }))
+    canvas:SetMargin(inkMargin.new({ left = 0.0, top = 0.0, right = 0.0, bottom = 128.0 }))
+    canvas:SetSize(Vector2.new({ X = BAR_W, Y = BAR_H }))
+    canvas:SetVisible(false)
+    local host = window
+    if inkHost ~= nil then
+      host = inkHost
+      hosted = true
+    end
+    canvas:Reparent(host, -1)
+    parent = host
+  end
 
   slots = {}
   local i = 1
@@ -463,6 +522,37 @@ local function build()
   return true
 end
 
+local function bindHud()
+  pcall(function()
+    local layer = Game.GetInkSystem():GetLayer(CName.new("inkHUDLayer"))
+    if layer == nil then
+      return
+    end
+    local ctrl = nil
+    pcall(function()
+      ctrl = layer:GetGameController()
+    end)
+    if ctrl == nil then
+      return
+    end
+    inkController = ctrl
+    pcall(function()
+      inkHost = ctrl:GetRootCompoundWidget()
+    end)
+    if not hostPrinted then
+      hostPrinted = true
+      local name = ""
+      pcall(function()
+        name = NameToString(ctrl:GetClassName())
+      end)
+      if name == "" then
+        name = tostring(ctrl)
+      end
+      print("QuickHack: HUD host bound " .. name)
+    end
+  end)
+end
+
 local function rememberHud(this, takeHost)
   if this == nil then
     return
@@ -502,18 +592,30 @@ function Hud.install()
       rememberHud(this, false)
     end)
   end)
+  pcall(function()
+    ObserveAfter("gameuiHudHealthbarGameController", "OnInitialize", function(this)
+      rememberHud(this, false)
+    end)
+  end)
 end
 
 function Hud.invalidate()
+  if canvas ~= nil and parent ~= nil then
+    pcall(function()
+      parent:RemoveChild(canvas)
+    end)
+  end
   canvas = nil
   parent = nil
   slots = {}
   overflow = nil
   built = false
   lastGen = -1
+  hosted = false
 end
 
 function Hud.ensure()
+  bindHud()
   if built and canvas ~= nil then
     local alive = pcall(function()
       canvas:GetName()
@@ -522,8 +624,10 @@ function Hud.ensure()
       Hud.invalidate()
     end
   end
+  if built and not hosted and inkController ~= nil then
+    Hud.invalidate()
+  end
   if built then
-    adoptHost()
     return
   end
   local ok, err = pcall(build)

@@ -313,6 +313,89 @@ public class QuickHackIcons extends IScriptable {
     };
     return true;
   }
+
+  public final static func MakeBar(controller: wref<inkGameController>, width: Float, height: Float, bottom: Float) -> wref<inkCanvas> {
+    let root: wref<inkCompoundWidget>;
+    let existing: wref<inkWidget>;
+    let bar: ref<inkCanvas>;
+    let margin: inkMargin;
+    if !IsDefined(controller) {
+      return null;
+    };
+    root = controller.GetRootCompoundWidget();
+    if !IsDefined(root) {
+      return null;
+    };
+    existing = root.GetWidget(n"quickhack_bar");
+    if IsDefined(existing) {
+      root.RemoveChild(existing);
+    };
+    bar = new inkCanvas();
+    bar.SetName(n"quickhack_bar");
+    bar.SetAnchor(inkEAnchor.BottomCenter);
+    bar.SetAnchorPoint(new Vector2(0.50, 1.00));
+    bar.SetSize(new Vector2(width, height));
+    margin.left = 0.00;
+    margin.top = 0.00;
+    margin.right = 0.00;
+    margin.bottom = bottom;
+    bar.SetMargin(margin);
+    bar.SetVisible(false);
+    bar.Reparent(root, -1);
+    return bar;
+  }
+
+  public final static func PaintSlot(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float, owner: wref<IScriptable>) -> Bool {
+    let record: wref<UIIcon_Record>;
+    let image: ref<inkImage>;
+    let iconRef: ref<UIIconReference>;
+    let controller: wref<inkGameController>;
+    let margin: inkMargin;
+    let imageName: CName;
+    let old: wref<inkWidget>;
+    if !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return false;
+    };
+    record = TweakDBInterface.GetUIIconRecord(command.m_icon);
+    if !IsDefined(record) {
+      return false;
+    };
+    imageName = StringToName("qhicon" + IntToString(slot));
+    old = parent.GetWidget(imageName);
+    if IsDefined(old) {
+      parent.RemoveChild(old);
+    };
+    image = new inkImage();
+    image.SetName(imageName);
+    image.SetAnchor(inkEAnchor.TopLeft);
+    image.SetAnchorPoint(new Vector2(0.00, 0.00));
+    image.SetSize(new Vector2(size, size));
+    image.SetFitToContent(false);
+    image.SetVisible(true);
+    image.SetOpacity(1.00);
+    image.SetActiveTextureType(inkTextureType.StaticTexture);
+    margin.left = x;
+    margin.top = y;
+    margin.right = 0.00;
+    margin.bottom = 0.00;
+    image.SetMargin(margin);
+    image.Reparent(parent, -1);
+    image.SetAtlasResource(record.AtlasResourcePath());
+    image.SetTexturePart(record.AtlasPartName());
+    iconRef = new UIIconReference();
+    iconRef.iconID = command.m_icon;
+    if IsDefined(owner) {
+      controller = owner as inkGameController;
+      if IsDefined(controller) {
+        InkImageUtils.RequestSetImage(controller, image, command.m_icon);
+      } else {
+        image.RequestSetImage(iconRef, owner);
+      };
+    } else {
+      image.RequestSetImage(iconRef);
+    };
+    return true;
+  }
 }
 
 public class QuickHackCast extends IScriptable {
