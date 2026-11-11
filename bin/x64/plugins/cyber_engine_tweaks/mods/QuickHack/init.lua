@@ -37,6 +37,16 @@ local function missingStream(err)
     end,
     push = function()
     end,
+    isBarOn = function()
+      return true
+    end,
+    isStreamOn = function()
+      return true
+    end,
+    setBarOn = function()
+    end,
+    setStreamOn = function()
+    end,
   }
 end
 
@@ -70,7 +80,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 66")
+  print("QuickHack ready build 67")
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -82,6 +92,7 @@ registerForEvent("onOverlayClose", function()
 end)
 
 local updateErrorPrinted = false
+local barShown = true
 
 registerForEvent("onUpdate", function(dt)
   local player = Game.GetPlayer()
@@ -97,18 +108,27 @@ registerForEvent("onUpdate", function(dt)
       print("QuickHack: " .. name .. " failed: " .. tostring(err))
     end
   end
-  run("hud ensure", function()
-    Hud.ensure()
-  end)
+  local barOn = Stream.isBarOn()
+  if not barOn and barShown then
+    Hud.destroy()
+  end
+  barShown = barOn
+  if barOn then
+    run("hud ensure", function()
+      Hud.ensure()
+    end)
+  end
   run("target", function()
     Target.tick(dt)
   end)
   run("dilation", function()
     Cast.tickDilation()
   end)
-  run("hud refresh", function()
-    Hud.refresh()
-  end)
+  if barOn then
+    run("hud refresh", function()
+      Hud.refresh()
+    end)
+  end
   run("stream", function()
     Stream.tick(dt)
   end)
@@ -128,3 +148,19 @@ registerForEvent("onShutdown", function()
     Hud.destroy()
   end)
 end)
+
+-- Console: GetMod("QuickHack").stream(false) / .bar(false); pass true to re-enable.
+local function toggle(setter, getter, label)
+  return function(on)
+    if on == nil then
+      on = not getter()
+    end
+    setter(on == true)
+    print("QuickHack: " .. label .. " " .. (getter() and "on" or "off"))
+  end
+end
+
+return {
+  stream = toggle(Stream.setStreamOn, Stream.isStreamOn, "console output"),
+  bar = toggle(Stream.setBarOn, Stream.isBarOn, "quickhack bar"),
+}

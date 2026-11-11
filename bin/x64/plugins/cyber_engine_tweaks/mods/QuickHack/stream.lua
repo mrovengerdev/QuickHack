@@ -14,6 +14,8 @@ local CFG_VER = 2
 local FONT = "base\\gameplay\\gui\\fonts\\industry\\industry.inkfontfamily"
 
 local color = { r = 1.5, g = 0.0, b = 0.0 }
+local streamOn = true
+local barOn = true
 local opacity = 0.82
 
 local canvas = nil
@@ -46,7 +48,7 @@ local function saveCfg()
   if file == nil then
     return
   end
-  file:write(string.format("v%d %.4f %.4f %.4f %.4f %.1f\n", CFG_VER, color.r, color.g, color.b, opacity, CHARS_PER_SEC))
+  file:write(string.format("v%d %.4f %.4f %.4f %.4f %.1f stream=%d bar=%d\n", CFG_VER, color.r, color.g, color.b, opacity, CHARS_PER_SEC, streamOn and 1 or 0, barOn and 1 or 0))
   file:close()
 end
 
@@ -57,6 +59,12 @@ local function loadCfg()
   end
   local text = file:read("*a")
   file:close()
+  if string.match(text or "", "stream=0") then
+    streamOn = false
+  end
+  if string.match(text or "", "bar=0") then
+    barOn = false
+  end
   local ver, r, g, b, a, s = string.match(text or "", "v(%d+)%s+([%d%.]+)%s+([%d%.]+)%s+([%d%.]+)%s+([%d%.]+)%s*([%d%.]*)")
   if ver == nil then
     saveCfg()
@@ -308,7 +316,7 @@ local queue = {}
 local scriptErrorPrinted = false
 
 function Stream.push(command)
-  if command == nil then
+  if not streamOn or command == nil then
     return
   end
   local ok, lines = pcall(scriptFor, command)
@@ -364,7 +372,7 @@ local function pushLine(text)
 end
 
 function Stream.tick(dt)
-  if not ensure() then
+  if not streamOn or not ensure() then
     return
   end
   if dt == nil or dt <= 0 then
@@ -434,6 +442,15 @@ function Stream.drawSettings()
   ImGui.SetNextWindowSize(360, 180, ImGuiCond.FirstUseEver)
   local visible = ImGui.Begin("QuickHack stream", ImGuiWindowFlags.AlwaysAutoResize)
   if visible ~= false then
+    local streamNext, streamHit = ImGui.Checkbox("Netrunner console output", streamOn)
+    if type(streamNext) == "boolean" and (streamHit == true or streamNext ~= streamOn) and streamNext ~= streamOn then
+      Stream.setStreamOn(streamNext)
+    end
+    local barNext, barHit = ImGui.Checkbox("Netrunner quickhack bar", barOn)
+    if type(barNext) == "boolean" and (barHit == true or barNext ~= barOn) and barNext ~= barOn then
+      Stream.setBarOn(barNext)
+    end
+    ImGui.Separator()
     ImGui.Text("Left-side code color, opacity, and write speed")
     local changed = false
     local nr, rOk = slider("Red##chan", color.r, 0.0, 1.5)
@@ -498,7 +515,29 @@ function Stream.destroy()
   end
   Stream.invalidate()
   jobs = {}
+  queue = {}
   active = nil
+end
+
+function Stream.isStreamOn()
+  return streamOn
+end
+
+function Stream.isBarOn()
+  return barOn
+end
+
+function Stream.setStreamOn(on)
+  streamOn = on == true
+  if not streamOn then
+    Stream.destroy()
+  end
+  saveCfg()
+end
+
+function Stream.setBarOn(on)
+  barOn = on == true
+  saveCfg()
 end
 
 pcall(loadCfg)
