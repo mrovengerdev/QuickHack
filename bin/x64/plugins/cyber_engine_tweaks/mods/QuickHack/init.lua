@@ -28,7 +28,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 38")
+  print("QuickHack ready build 39")
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -47,6 +47,7 @@ registerForEvent("onUpdate", function(dt)
     return
   end
   Hud.ensure()
+  Target.tick(dt)
   Cast.tickDilation()
   Hud.refresh()
   Stream.tick(dt)

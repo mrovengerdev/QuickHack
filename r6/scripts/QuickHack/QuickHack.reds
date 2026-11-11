@@ -166,22 +166,27 @@ public class QuickHackIcons extends IScriptable {
     return command.m_cost;
   }
 
-  public final static func Slot(command: ref<QuickhackData>, slot: Int32, x: Float, y: Float) -> ref<inkCanvas> {
+  public final static func Attach(parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float) -> Bool {
     let canvas: ref<inkCanvas>;
     let image: ref<inkImage>;
     let record: wref<UIIcon_Record>;
     let margin: inkMargin;
     let canvasName: CName;
     let imageName: CName;
-    if !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
-      return null;
+    let old: wref<inkWidget>;
+    if !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return false;
     };
     record = TweakDBInterface.GetUIIconRecord(command.m_icon);
     if !IsDefined(record) {
-      return null;
+      return false;
+    };
+    canvasName = StringToName("qhslot" + IntToString(slot));
+    old = parent.GetWidget(canvasName);
+    if IsDefined(old) {
+      parent.RemoveChild(old);
     };
     canvas = new inkCanvas();
-    canvasName = StringToName("qhslot" + IntToString(slot));
     canvas.SetName(canvasName);
     canvas.SetAnchor(inkEAnchor.TopLeft);
     canvas.SetSize(new Vector2(56.00, 56.00));
@@ -190,11 +195,13 @@ public class QuickHackIcons extends IScriptable {
     margin.right = 0.00;
     margin.bottom = 0.00;
     canvas.SetMargin(margin);
+    canvas.Reparent(parent, -1);
     canvas.SetVisible(true);
     image = new inkImage();
     imageName = StringToName("qhicon" + IntToString(slot));
     image.SetName(imageName);
-    image.SetAnchor(inkEAnchor.TopLeft);
+    image.SetAnchor(inkEAnchor.Fill);
+    image.SetAnchorPoint(new Vector2(0.50, 0.50));
     image.SetSize(new Vector2(56.00, 56.00));
     image.SetFitToContent(false);
     image.SetVisible(true);
@@ -202,7 +209,7 @@ public class QuickHackIcons extends IScriptable {
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
     InkImageUtils.RequestSetImage(null, image, command.m_icon);
-    return canvas;
+    return true;
   }
 }
 
