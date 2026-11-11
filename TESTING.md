@@ -6,10 +6,10 @@ Mod for Cyberpunk 2077 2.5 and Cyber Engine Tweaks 1.38.1. Looking at a hackable
 
 Install with Vortex before this mod. Each native plugin must be a 2.5 build.
 
-1. RED4ext. Loads CET. This mod ships no native plugin.
+1. RED4ext 1.31.0 or later. Required by redscript and Codeware. This mod ships no native plugin.
 2. redscript. Compiles `QuickHack.reds` so Lua can call private `TranslateChoicesIntoQuickSlotCommands` through `QuickHack_FillCommands`.
 3. Cyber Engine Tweaks 1.38.1. Lua host, ink bar, and the bindings menu.
-4. [Codeware](https://www.nexusmods.com/cyberpunk2077/mods/7780) 1.21 or later, for game patch 2.5. Required to spawn the quickhack icon widgets. This zip does not include Codeware; install it separately, then this mod.
+4. [Codeware](https://www.nexusmods.com/cyberpunk2077/mods/7780) 1.21 or later, for game patch 2.5. Required for `ResRef.ToString`, which the icon lookup uses to read each hack's icon atlas path. This zip does not include Codeware; install it separately, then this mod.
 
 Launch the game once so redscript finishes its first compile, then quit.
 
