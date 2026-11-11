@@ -1,7 +1,32 @@
 local Target = require("target")
 local Cast = require("cast")
 local Hud = require("hud")
-local Stream = require("stream")
+
+local function missingStream(err)
+  print("QuickHack: stream load error: " .. tostring(err))
+  return {
+    tick = function()
+    end,
+    drawSettings = function()
+    end,
+    invalidate = function()
+    end,
+    destroy = function()
+    end,
+    push = function()
+    end,
+  }
+end
+
+local Stream
+do
+  local ok, result = pcall(require, "stream")
+  if ok and type(result) == "table" and type(result.tick) == "function" then
+    Stream = result
+  else
+    Stream = missingStream(result)
+  end
+end
 
 local inputPrinted = {}
 local slot = 1
@@ -28,7 +53,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 46")
+  print("QuickHack ready build 47")
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -72,12 +97,17 @@ registerForEvent("onUpdate", function(dt)
   end)
 end)
 
-
 registerForEvent("onDraw", function()
-  Stream.drawSettings()
+  pcall(function()
+    Stream.drawSettings()
+  end)
 end)
 
 registerForEvent("onShutdown", function()
-  Stream.destroy()
-  Hud.destroy()
+  pcall(function()
+    Stream.destroy()
+  end)
+  pcall(function()
+    Hud.destroy()
+  end)
 end)

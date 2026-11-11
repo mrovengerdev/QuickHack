@@ -33,6 +33,8 @@ local inkHost = nil
 local hosted = false
 local hostPrinted = false
 local hostRetry = false
+local barHostPrinted = false
+local spawnPrinted = false
 
 local function screenX(widget)
   local ok, pos = pcall(function()
@@ -146,6 +148,9 @@ local function applyAtlas(icon, path, part, size)
     return false
   end
   local ok = pcall(function()
+    pcall(function()
+      icon:SetStyle(ResRef.FromString("base\\gameplay\\gui\\common\\main_colors.inkstyle"))
+    end)
     icon:SetAtlasResource(ResRef.FromString(path))
     icon:SetTexturePart(CName.new(part))
     icon:SetFitToContent(false)
@@ -175,13 +180,34 @@ local function applyIcon(slot, command)
     return
   end
   local painted = false
-  local okPaint, redsPaint = pcall(function()
-    return QuickHackIcons.PaintSlot(canvas, command, slot.index, slot.x + 10, ICON_Y, ICON, inkController)
-  end)
-  if okPaint and redsPaint == true then
+  if inkController ~= nil then
+    local okSpawn, redsSpawn = pcall(function()
+      return QuickHackIcons.SpawnSlot(inkController, canvas, command, slot.index, slot.x + 10, ICON_Y, ICON)
+    end)
+    if okSpawn and redsSpawn == true then
+      painted = true
+      if not spawnPrinted then
+        spawnPrinted = true
+        print("QuickHack: icon spawned from HUD library")
+      end
+    elseif okSpawn ~= true and not spawnPrinted then
+      spawnPrinted = true
+      print("QuickHack: icon spawn error: " .. tostring(redsSpawn))
+    end
+  end
+  local okPaint, redsPaint
+  if not painted then
+    okPaint, redsPaint = pcall(function()
+      return QuickHackIcons.PaintSlot(canvas, command, slot.index, slot.x + 10, ICON_Y, ICON, inkController)
+    end)
+  end
+  if (painted) or (okPaint and redsPaint == true) then
     painted = true
     pcall(function()
       local widget = canvas:GetWidget(CName.new("qhicon" .. tostring(slot.index)))
+      if widget == nil then
+        widget = canvas:GetWidget(CName.new("qhspawn" .. tostring(slot.index)))
+      end
       if widget ~= nil then
         slot.icon = widget
         if WHITE ~= nil then
@@ -456,6 +482,15 @@ local function build()
     end
     canvas:Reparent(host, -1)
     parent = host
+  end
+
+  if not barHostPrinted then
+    barHostPrinted = true
+    if hosted then
+      print("QuickHack: bar hosted on HUD")
+    else
+      print("QuickHack: bar on virtual window")
+    end
   end
 
   slots = {}

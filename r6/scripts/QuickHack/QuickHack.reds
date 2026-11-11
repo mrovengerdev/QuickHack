@@ -297,6 +297,7 @@ public class QuickHackIcons extends IScriptable {
     image.SetFitToContent(false);
     image.SetSize(new Vector2(56.00, 56.00));
     image.SetActiveTextureType(inkTextureType.StaticTexture);
+    image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
     image.SetAtlasResource(record.AtlasResourcePath());
     image.SetTexturePart(record.AtlasPartName());
     iconRef = new UIIconReference();
@@ -374,6 +375,7 @@ public class QuickHackIcons extends IScriptable {
     image.SetVisible(true);
     image.SetOpacity(1.00);
     image.SetActiveTextureType(inkTextureType.StaticTexture);
+    image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
     margin.left = x;
     margin.top = y;
     margin.right = 0.00;
@@ -395,6 +397,103 @@ public class QuickHackIcons extends IScriptable {
       image.RequestSetImage(iconRef);
     };
     return true;
+  }
+
+  public final static func FindImage(widget: wref<inkWidget>) -> wref<inkImage> {
+    let image: wref<inkImage>;
+    let compound: wref<inkCompoundWidget>;
+    let i: Int32;
+    let found: wref<inkImage>;
+    if !IsDefined(widget) {
+      return null;
+    };
+    image = widget as inkImage;
+    if IsDefined(image) {
+      return image;
+    };
+    compound = widget as inkCompoundWidget;
+    if IsDefined(compound) {
+      i = 0;
+      while i < compound.GetNumChildren() {
+        found = QuickHackIcons.FindImage(compound.GetWidgetByIndex(i));
+        if IsDefined(found) {
+          return found;
+        };
+        i += 1;
+      };
+    };
+    return null;
+  }
+
+  public final static func TrySpawn(controller: wref<inkGameController>, parent: wref<inkCompoundWidget>, path: ResRef, item: CName, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float) -> Bool {
+    let spawned: wref<inkWidget>;
+    let image: wref<inkImage>;
+    let margin: inkMargin;
+    let spawnName: CName;
+    let imageName: CName;
+    let old: wref<inkWidget>;
+    if !IsDefined(controller) || !IsDefined(parent) || !IsDefined(command) {
+      return false;
+    };
+    spawnName = StringToName("qhspawn" + IntToString(slot));
+    imageName = StringToName("qhicon" + IntToString(slot));
+    old = parent.GetWidget(spawnName);
+    if IsDefined(old) {
+      parent.RemoveChild(old);
+    };
+    old = parent.GetWidget(imageName);
+    if IsDefined(old) {
+      parent.RemoveChild(old);
+    };
+    spawned = controller.SpawnFromExternal(parent, path, item);
+    if !IsDefined(spawned) {
+      return false;
+    };
+    image = QuickHackIcons.FindImage(spawned);
+    if !IsDefined(image) {
+      parent.RemoveChild(spawned);
+      return false;
+    };
+    image.Reparent(parent, -1);
+    parent.RemoveChild(spawned);
+    image.SetName(imageName);
+    image.SetAnchor(inkEAnchor.TopLeft);
+    image.SetAnchorPoint(new Vector2(0.00, 0.00));
+    image.SetSize(new Vector2(size, size));
+    image.SetFitToContent(false);
+    image.SetVisible(true);
+    image.SetOpacity(1.00);
+    image.SetActiveTextureType(inkTextureType.StaticTexture);
+    image.SetStyle(r"base\\gameplay\\gui\\common\\main_colors.inkstyle");
+    margin.left = x;
+    margin.top = y;
+    margin.right = 0.00;
+    margin.bottom = 0.00;
+    image.SetMargin(margin);
+    InkImageUtils.RequestSetImage(controller, image, command.m_icon);
+    return true;
+  }
+
+  public final static func SpawnSlot(controller: wref<inkGameController>, parent: wref<inkCompoundWidget>, command: ref<QuickhackData>, slot: Int32, x: Float, y: Float, size: Float) -> Bool {
+    if !IsDefined(controller) || !IsDefined(parent) || !IsDefined(command) || !TDBID.IsValid(command.m_icon) {
+      return false;
+    };
+    if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"VertRoot", command, slot, x, y, size) {
+      return true;
+    };
+    if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"Root", command, slot, x, y, size) {
+      return true;
+    };
+    if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"buff", command, slot, x, y, size) {
+      return true;
+    };
+    if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\widgets\\healthbar\\playerbuffbar.inkwidget", n"icon", command, slot, x, y, size) {
+      return true;
+    };
+    if QuickHackIcons.TrySpawn(controller, parent, r"base\\gameplay\\gui\\common\\tooltip\\tooltip_item.inkwidget", n"itemIcon", command, slot, x, y, size) {
+      return true;
+    };
+    return false;
   }
 }
 

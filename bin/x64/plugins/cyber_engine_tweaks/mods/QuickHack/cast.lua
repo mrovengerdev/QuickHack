@@ -1,5 +1,4 @@
 local Target = require("target")
-local Stream = require("stream")
 
 local overlay = false
 local lastCast = {}
@@ -114,7 +113,10 @@ function Cast.tryCast(slotIndex)
     bail(slotIndex, "execute returned false")
     return
   end
-  Stream.push(command)
+  local okStream, streamMod = pcall(require, "stream")
+  if okStream and type(streamMod) == "table" and type(streamMod.push) == "function" then
+    streamMod.push(command)
+  end
 end
 
 return Cast
