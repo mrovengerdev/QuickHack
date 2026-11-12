@@ -36,6 +36,50 @@ local iconTintPrinted = false
 local costPrinted = false
 local buildErrorPrinted = false
 
+
+local UNBOUND_LABEL = "[UNBINDED]"
+
+local function bindingLabel(index)
+  local ok, name = pcall(function()
+    return GetBind("QuickHackSlot" .. tostring(index))
+  end)
+  if not ok or name == nil then
+    return UNBOUND_LABEL
+  end
+  name = tostring(name)
+  if name == "" or name == "Unbound" or name == "unbound" then
+    return UNBOUND_LABEL
+  end
+  return name
+end
+
+local function bindingFontSize(label)
+  local n = #label
+  if n <= 3 then
+    return 18
+  end
+  if n <= 6 then
+    return 14
+  end
+  if n <= 9 then
+    return 12
+  end
+  return 10
+end
+
+local function applyBinding(slot)
+  if slot == nil or slot.number == nil then
+    return
+  end
+  local label = bindingLabel(slot.index)
+  if label == slot.bindLabel then
+    return
+  end
+  slot.bindLabel = label
+  slot.number:SetText(label)
+  slot.number:SetFontSize(bindingFontSize(label))
+end
+
 local function place(widget, x, y, w, h)
   widget:SetAnchor(inkEAnchor.TopLeft)
   widget:SetAnchorPoint(Vector2.new({ X = 0.0, Y = 0.0 }))
@@ -305,6 +349,7 @@ local function showSlot(slot, command)
   local opacity = command.m_isLocked and 0.4 or 1.0
   slot.number:SetOpacity(1.0)
   slot.title:SetOpacity(opacity)
+  applyBinding(slot)
   slot.number:SetVisible(true)
   slot.title:SetVisible(true)
   slot.title:SetText(optionText(command))
@@ -418,7 +463,7 @@ local function build()
     end
 
     local ramText = makeText(x, RAM_Y, SLOT_W, 16, 14, NUMBER_TINT, "")
-    local number = makeText(x, NUMBER_Y, SLOT_W, 18, 18, NUMBER_TINT, tostring(i))
+    local number = makeText(x, NUMBER_Y, SLOT_W, 18, 18, NUMBER_TINT, bindingLabel(i))
     local title = makeText(x, TITLE_Y, SLOT_W, 30, 13, NUMBER_TINT, "")
     pcall(function()
       title:SetFitToContent(false)
@@ -439,9 +484,11 @@ local function build()
       title = title,
       ramText = ramText,
       iconKey = nil,
+      bindLabel = nil,
       index = i,
       x = x,
     }
+    applyBinding(slots[i])
     i = i + 1
   end
 
@@ -564,6 +611,7 @@ function Hud.refresh()
   while ramIndex <= SLOT_COUNT do
     local command = list[ramIndex]
     if command ~= nil and slots[ramIndex] ~= nil then
+      applyBinding(slots[ramIndex])
       paintRam(slots[ramIndex], command)
     end
     ramIndex = ramIndex + 1

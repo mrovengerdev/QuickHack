@@ -484,13 +484,18 @@ function Stream.drawSettings()
       changed = true
     end
     ImGui.SameLine()
-    if ImGui.Button("BLUE") then
-      color.r, color.g, color.b = 0.0, 0.0, 1.5
+    if ImGui.Button("TEAL") then
+      color.r, color.g, color.b = 0.0, 1.5, 1.15
       changed = true
     end
     ImGui.SameLine()
     if ImGui.Button("GREEN") then
       color.r, color.g, color.b = 0.0, 1.5, 0.0
+      changed = true
+    end
+    ImGui.SameLine()
+    if ImGui.Button("YELLOW") then
+      color.r, color.g, color.b = 1.5, 1.5, 0.0
       changed = true
     end
     if changed then
