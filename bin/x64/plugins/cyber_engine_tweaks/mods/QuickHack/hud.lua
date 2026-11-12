@@ -153,6 +153,22 @@ local function availableRam()
   return nil
 end
 
+local function canAfford(command)
+  local player = Game.GetPlayer()
+  local ok, can = pcall(function()
+    return QuickHackIcons.CanAfford(command, player)
+  end)
+  if ok and can == true then
+    return true
+  end
+  if ok and can == false then
+    return false
+  end
+  local cost = readCost(command)
+  local available = availableRam()
+  return cost ~= nil and (available == nil or cost <= available)
+end
+
 local function readCost(command)
   local ok, cost = pcall(function()
     return QuickHackIcons.CostOf(command)
@@ -218,8 +234,7 @@ local function paintRam(slot, command)
     return
   end
   slot.ramText:SetText(tostring(cost))
-  local available = availableRam()
-  local unaffordable = available ~= nil and cost > available
+  local unaffordable = not canAfford(command)
   gameTint(slot.ramText, unaffordable)
   gameTint(slot.number, unaffordable)
   gameTint(slot.title, unaffordable)

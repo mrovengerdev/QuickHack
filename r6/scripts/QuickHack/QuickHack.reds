@@ -190,6 +190,27 @@ public class QuickHackIcons extends IScriptable {
     return command.m_cost;
   }
 
+  public final static func CanAfford(command: ref<QuickhackData>, player: wref<GameObject>) -> Bool {
+    let cost: Int32;
+    let memory: Float;
+    let healthReduction: Float;
+    if !IsDefined(command) || !IsDefined(player) {
+      return false;
+    };
+    cost = QuickHackIcons.CostOf(command);
+    if cost <= 0 {
+      return true;
+    };
+    memory = GameInstance.GetStatPoolsSystem(player.GetGame()).GetStatPoolValue(player.GetEntityID(), gamedataStatPoolType.Memory, false);
+    if memory >= Cast<Float>(cost) {
+      return true;
+    };
+    if QuickHackableHelper.IsOverclockedStateActive(player) && QuickHackableHelper.CanPayWithHealthInOverclockedState(player, cost, healthReduction) {
+      return true;
+    };
+    return false;
+  }
+
   public final static func TitleOf(command: ref<QuickhackData>) -> String {
     let title: String;
     let localized: String;
