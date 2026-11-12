@@ -260,18 +260,16 @@ local function canAfford(command)
   if cost <= 0 then
     return true
   end
+  local player = Game.GetPlayer()
+  local memory = rawPool(player, gamedataStatPoolType.Memory)
+  if memory ~= nil then
+    if memory >= cost then
+      return true
+    end
+    return canPayWithHealth(player, cost, memory)
+  end
   local available = availableRam()
-  local memory = available
-  if memory == nil then
-    memory = rawPool(Game.GetPlayer(), gamedataStatPoolType.Memory)
-  end
-  if memory == nil then
-    return true
-  end
-  if memory >= cost then
-    return true
-  end
-  return canPayWithHealth(Game.GetPlayer(), cost, memory)
+  return available == nil or cost <= available
 end
 
 local function readCost(command)
@@ -339,12 +337,7 @@ local function paintRam(slot, command)
     return
   end
   slot.ramText:SetText(tostring(cost))
-  local available = availableRam()
-  local unaffordable = available ~= nil and cost > available
-  local okAff, can = pcall(canAfford, command)
-  if okAff and can == true then
-    unaffordable = false
-  end
+  local unaffordable = not canAfford(command)
   gameTint(slot.ramText, unaffordable)
   gameTint(slot.number, unaffordable)
   gameTint(slot.title, unaffordable)
@@ -354,12 +347,7 @@ local function paintRam(slot, command)
     slot.fill:SetVisible(true)
   end
   slot.ramText:SetVisible(true)
-  if slot.icon == nil and canvas ~= nil and slot.index ~= nil then
-    pcall(function()
-      slot.icon = canvas:GetWidget(CName.new("qhicon" .. tostring(slot.index)))
-    end)
-  end
-  if slot.icon ~= nil then
+  if slot.icon ~= nil and slot.iconKey ~= nil then
     local okTint, tinted = pcall(function()
       return QuickHackIcons.TintIcon(slot.icon, unaffordable)
     end)
