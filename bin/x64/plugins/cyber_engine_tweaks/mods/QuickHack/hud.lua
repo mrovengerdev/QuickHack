@@ -38,9 +38,13 @@ local buildErrorPrinted = false
 
 
 local UNBOUND_LABEL = "[UNBINDED]"
+local bindErrorPrinted = false
 
 local function bindingLabel(index)
   local ok, name = pcall(function()
+    if type(GetBind) ~= "function" then
+      return nil
+    end
     return GetBind("QuickHackSlot" .. tostring(index))
   end)
   if not ok or name == nil then
@@ -54,6 +58,9 @@ local function bindingLabel(index)
 end
 
 local function bindingFontSize(label)
+  if type(label) ~= "string" then
+    return 18
+  end
   local n = #label
   if n <= 3 then
     return 18
@@ -71,13 +78,28 @@ local function applyBinding(slot)
   if slot == nil or slot.number == nil then
     return
   end
-  local label = bindingLabel(slot.index)
-  if label == slot.bindLabel then
+  local ok, err = pcall(function()
+    local label = bindingLabel(slot.index)
+    if label == slot.bindLabel then
+      return
+    end
+    slot.number:SetText(label)
+    slot.number:SetFontSize(bindingFontSize(label))
+    slot.bindLabel = label
+  end)
+  if ok then
     return
   end
-  slot.bindLabel = label
-  slot.number:SetText(label)
-  slot.number:SetFontSize(bindingFontSize(label))
+  if not bindErrorPrinted then
+    bindErrorPrinted = true
+    print("QuickHack: binding label failed: " .. tostring(err))
+  end
+  pcall(function()
+    local fallback = tostring(slot.index)
+    slot.number:SetText(fallback)
+    slot.number:SetFontSize(18)
+    slot.bindLabel = fallback
+  end)
 end
 
 local function place(widget, x, y, w, h)
@@ -513,7 +535,7 @@ local function build()
     end
 
     local ramText = makeText(x, RAM_Y, SLOT_W, 16, 14, NUMBER_TINT, "")
-    local number = makeText(x, NUMBER_Y, SLOT_W, 18, 18, NUMBER_TINT, bindingLabel(i))
+    local number = makeText(x, NUMBER_Y, SLOT_W, 18, 18, NUMBER_TINT, tostring(i))
     local title = makeText(x, TITLE_Y, SLOT_W, 30, 13, NUMBER_TINT, "")
     pcall(function()
       title:SetFitToContent(false)
@@ -661,32 +683,34 @@ function Hud.refresh()
   while ramIndex <= SLOT_COUNT do
     local command = list[ramIndex]
     if command ~= nil and slots[ramIndex] ~= nil then
-      applyBinding(slots[ramIndex])
-      paintRam(slots[ramIndex], command)
+      pcall(applyBinding, slots[ramIndex])
+      pcall(paintRam, slots[ramIndex], command)
     end
     ramIndex = ramIndex + 1
   end
-  if gen == lastGen then
-    return
-  end
-  lastGen = gen
-
-  local i = 1
-  while i <= SLOT_COUNT do
-    local command = list[i]
-    if command == nil then
-      hideSlot(slots[i])
-    else
-      showSlot(slots[i], command)
+  if gen ~= lastGen then
+    lastGen = gen
+    local i = 1
+    while i <= SLOT_COUNT do
+      local command = list[i]
+      if command == nil then
+        pcall(hideSlot, slots[i])
+      else
+        pcall(showSlot, slots[i], command)
+      end
+      i = i + 1
     end
-    i = i + 1
-  end
 
-  if count > 9 then
-    overflow:SetText("+" .. tostring(count - 9))
-    overflow:SetVisible(true)
-  else
-    overflow:SetVisible(false)
+    if count > 9 then
+      pcall(function()
+        overflow:SetText("+" .. tostring(count - 9))
+        overflow:SetVisible(true)
+      end)
+    else
+      pcall(function()
+        overflow:SetVisible(false)
+      end)
+    end
   end
 
   canvas:SetVisible(true)
