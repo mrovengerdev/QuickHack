@@ -58,20 +58,7 @@ local function bindingLabel(index)
 end
 
 local function bindingFontSize(label)
-  if type(label) ~= "string" then
-    return 18
-  end
-  local n = #label
-  if n <= 3 then
-    return 18
-  end
-  if n <= 6 then
-    return 14
-  end
-  if n <= 9 then
-    return 12
-  end
-  return 10
+  return 18
 end
 
 local function applyBinding(slot)
@@ -239,6 +226,12 @@ local function hasOverclock(player)
     return false
   end
   local ok, active = pcall(function()
+    return StatusEffectSystem.ObjectHasStatusEffect(player, TweakDBID.new(OVERCLOCK_BUFF))
+  end)
+  if ok then
+    return active == true
+  end
+  ok, active = pcall(function()
     return Game.GetStatusEffectSystem():HasStatusEffect(player:GetEntityID(), TweakDBID.new(OVERCLOCK_BUFF))
   end)
   return ok and active == true
@@ -273,16 +266,18 @@ local function canAfford(command)
   if cost <= 0 then
     return true
   end
-  local player = Game.GetPlayer()
-  local memory = rawPool(player, gamedataStatPoolType.Memory)
-  if memory ~= nil then
-    if memory >= cost then
-      return true
-    end
-    return canPayWithHealth(player, cost, memory)
-  end
   local available = availableRam()
-  return available == nil or cost <= available
+  local memory = available
+  if memory == nil then
+    memory = rawPool(Game.GetPlayer(), gamedataStatPoolType.Memory)
+  end
+  if memory == nil then
+    return true
+  end
+  if memory >= cost then
+    return true
+  end
+  return canPayWithHealth(Game.GetPlayer(), cost, memory)
 end
 
 local function readCost(command)
@@ -313,19 +308,42 @@ local function gameTint(widget, unaffordable)
   if widget == nil then
     return
   end
+  pcall(function()
+    widget:UnbindProperty(CName.new("tintColor"))
+  end)
   local ok = pcall(function()
     widget:SetStyle(ResRef.FromString(MAIN_COLORS))
     widget:BindProperty(CName.new("tintColor"), CName.new(unaffordable and "MainColors.Red" or "MainColors.Blue"))
   end)
-  if not ok then
-    if not tintPrinted then
-      tintPrinted = true
-      print("QuickHack: game color binding failed, using fallback tint")
-    end
+  if not ok and not tintPrinted then
+    tintPrinted = true
+    print("QuickHack: game color binding failed, using fallback tint")
+  end
+  pcall(function()
+    widget:SetTintColor(unaffordable and RED or NUMBER_TINT)
+  end)
+end
+
+local function resolveIcon(slot)
+  if slot == nil then
+    return nil
+  end
+  if slot.icon == nil and canvas ~= nil and slot.index ~= nil then
     pcall(function()
-      widget:SetTintColor(unaffordable and RED or NUMBER_TINT)
+      slot.icon = canvas:GetWidget(CName.new("qhicon" .. tostring(slot.index)))
     end)
   end
+  local icon = slot.icon
+  if icon == nil then
+    return nil
+  end
+  local ok, image = pcall(function()
+    return QuickHackIcons.FindImage(icon)
+  end)
+  if ok and image ~= nil then
+    return image
+  end
+  return icon
 end
 
 local function eachEdge(slot, fn)
@@ -344,13 +362,21 @@ local function paintRam(slot, command)
     return
   end
   local cost = readCost(command)
+  local unaffordable = false
   if cost == nil then
     slot.ramText:SetText("")
     slot.ramText:SetVisible(false)
-    return
+  else
+    slot.ramText:SetText(tostring(cost))
+    slot.ramText:SetVisible(true)
+    local okAff, can = pcall(canAfford, command)
+    if okAff then
+      unaffordable = can ~= true
+    else
+      local available = availableRam()
+      unaffordable = available ~= nil and cost > available
+    end
   end
-  slot.ramText:SetText(tostring(cost))
-  local unaffordable = not canAfford(command)
   gameTint(slot.ramText, unaffordable)
   gameTint(slot.number, unaffordable)
   gameTint(slot.title, unaffordable)
@@ -359,18 +385,16 @@ local function paintRam(slot, command)
     slot.fill:SetOpacity(FILL_OPACITY)
     slot.fill:SetVisible(true)
   end
-  slot.ramText:SetVisible(true)
-  if slot.icon ~= nil and slot.iconKey ~= nil then
+  local image = resolveIcon(slot)
+  if image ~= nil then
     local okTint, tinted = pcall(function()
-      return QuickHackIcons.TintIcon(slot.icon, unaffordable)
+      return QuickHackIcons.TintIcon(slot.icon or image, unaffordable)
     end)
-    if not okTint or tinted ~= true then
-      if not iconTintPrinted then
-        iconTintPrinted = true
-        print("QuickHack: icon tint failed " .. tostring(tinted))
-      end
-      gameTint(slot.icon, unaffordable)
+    if (not okTint or tinted ~= true) and not iconTintPrinted then
+      iconTintPrinted = true
+      print("QuickHack: icon tint failed " .. tostring(tinted))
     end
+    gameTint(image, unaffordable)
   end
   eachEdge(slot, function(edge)
     gameTint(edge, unaffordable)
