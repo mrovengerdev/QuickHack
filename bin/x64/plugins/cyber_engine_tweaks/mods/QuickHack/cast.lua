@@ -38,6 +38,24 @@ end
 
 local bailPrinted = {}
 
+local function notify(slotIndex, ok)
+  pcall(function()
+    local Hud = require("hud")
+    if type(Hud) == "table" and type(Hud.feedback) == "function" then
+      Hud.feedback(slotIndex, ok)
+    end
+  end)
+end
+
+local function ramDenied(command)
+  local Hud = require("hud")
+  if type(Hud) ~= "table" or type(Hud.canAfford) ~= "function" then
+    return false, nil, nil
+  end
+  local affordable, available, cost = Hud.canAfford(command)
+  return affordable == false, available, cost
+end
+
 local function bail(slotIndex, reason)
   local key = tostring(slotIndex) .. ":" .. reason
   if bailPrinted[key] then
@@ -82,6 +100,7 @@ function Cast.tryCast(slotIndex)
   end
   if command.m_isLocked then
     bail(slotIndex, "locked")
+    notify(slotIndex, false)
     return
   end
 
@@ -97,12 +116,27 @@ function Cast.tryCast(slotIndex)
   end)
   if not ok then
     bail(slotIndex, "execute error " .. tostring(started))
+    notify(slotIndex, false)
     return
   end
   if not started then
     bail(slotIndex, "execute returned false")
+    notify(slotIndex, false)
+    local denied, available, cost = false, nil, nil
+    pcall(function()
+      denied, available, cost = ramDenied(command)
+    end)
+    if denied then
+      pcall(function()
+        local streamMod = require("stream")
+        if type(streamMod) == "table" and type(streamMod.pushFail) == "function" then
+          streamMod.pushFail(command, available, cost)
+        end
+      end)
+    end
     return
   end
+  notify(slotIndex, true)
   local okStream, streamMod = pcall(require, "stream")
   if okStream and type(streamMod) == "table" and type(streamMod.push) == "function" then
     streamMod.push(command)

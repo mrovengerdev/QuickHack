@@ -80,7 +80,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 77")
+  print("QuickHack ready build 78")
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -127,6 +127,9 @@ registerForEvent("onUpdate", function(dt)
   if barOn then
     run("hud refresh", function()
       Hud.refresh()
+    end)
+    run("hud fx", function()
+      Hud.tick(dt)
     end)
   end
   run("stream", function()

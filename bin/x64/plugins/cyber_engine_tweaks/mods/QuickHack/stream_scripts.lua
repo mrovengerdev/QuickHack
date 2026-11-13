@@ -701,6 +701,331 @@ local function create()
     }, "TARGET ROUTINE RETURNED")
   end)
 
+  local FAIL = {}
+
+  local function addFail(family, fn)
+    local list = FAIL[family]
+    if list == nil then
+      list = {}
+      FAIL[family] = list
+    end
+    list[#list + 1] = fn
+  end
+
+  local function failbar(filled, width)
+    width = width or 16
+    if filled < 0 then
+      filled = 0
+    end
+    if filled > width then
+      filled = width
+    end
+    if filled >= width then
+      return "[" .. string.rep("#", width - 1) .. "X]"
+    end
+    if filled <= 0 then
+      return "[X" .. string.rep(".", width - 1) .. "]"
+    end
+    return "[" .. string.rep("#", filled) .. "X" .. string.rep(".", width - filled - 1) .. "]"
+  end
+
+  local function ramPair(available, cost)
+    local a = available
+    local c = cost
+    if type(a) ~= "number" then
+      a = 0
+    end
+    if type(c) ~= "number" then
+      c = 0
+    end
+    a = math.floor(a + 0.001)
+    c = math.floor(c + 0.001)
+    local maxv = c
+    if a > maxv then
+      maxv = a
+    end
+    if maxv < 1 then
+      maxv = 1
+    end
+    local function line(name, value, tag)
+      local filled = math.floor(16 * value / maxv + 0.5)
+      return "    " .. pad(name, 5) .. " " .. failbar(filled, 16) .. "  " .. tostring(value) .. "U  " .. tag
+    end
+    return line("ram", a, "LOW"), line("cost", c, "HELD")
+  end
+
+  local function failScript(title, art, message)
+    return script(title, art, message, { exit = "12", zeros = true, hexlines = 2 })
+  end
+
+  addFail("memorywipe", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    page  0  " .. failbar(16) .. "  LIVE",
+      "    page  1  " .. failbar(16) .. "  LIVE",
+      "    wipe  " .. failbar(0) .. "  ABORT",
+    }, "WIPE ABORTED - NO MEMORY")
+  end)
+
+  addFail("overheat", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    fan   " .. failbar(0) .. "  NO START",
+      "    temp  " .. failbar(1) .. "  COLD",
+      "    rail  --x--  HOLD",
+    }, "HEAT CYCLE ABORTED - NO MEMORY")
+  end)
+
+  addFail("shortcircuit", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    vbus  OPEN --x--  NO ARM",
+      "    spark x",
+      "    prot  " .. failbar(0) .. "  HOLD",
+    }, "BUS NOT ARMED - NO MEMORY")
+  end)
+
+  addFail("synapse", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    sig   ----------x----------",
+      "    thr   " .. failbar(0) .. "  NO LOCK",
+    }, "SYNAPSE LOCK ABORTED - NO MEMORY")
+  end)
+
+  addFail("rebootoptics", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    vis   +----------------+",
+      "          |  STILL LIVE X  |",
+      "          +----------------+",
+      "    boot  " .. failbar(0) .. "  ABORT",
+    }, "OPTICS REBOOT ABORTED - NO MEMORY")
+  end)
+
+  addFail("weaponglitch", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    fire  [>X              ]  NO JAM",
+      "    bolt  --------x--------  HOLD",
+    }, "GLITCH NOT ISSUED - NO MEMORY")
+  end)
+
+  addFail("cyberware", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    fw    " .. failbar(16) .. "  INTACT",
+      "    i2c   * --x-- * --x-- *  NO SEIZE",
+    }, "CYBERWARE BUS UNTOUCHED - NO MEMORY")
+  end)
+
+  addFail("systemreset", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    cpu0  " .. failbar(16) .. "  RUN",
+      "    cpu1  " .. failbar(16) .. "  RUN",
+      "    boot  [XXXX            ]  ABORT",
+    }, "RESET ABORTED - NO MEMORY")
+  end)
+
+  addFail("suicide", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    proc  " .. failbar(16) .. "  ALIVE",
+      "    sig   " .. failbar(0) .. "  NO TERM",
+    }, "HALT REFUSED - NO MEMORY")
+  end)
+
+  addFail("detonate", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    t-3   " .. failbar(0) .. "  HOLD",
+      "    fuse  --x--  ABORT",
+    }, "FUSE NOT ARMED - NO MEMORY")
+  end)
+
+  addFail("cripple", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    Lhip  " .. failbar(16) .. "  FREE",
+      "    gait  -- -- -- --  NO LOCK",
+    }, "MOTORS UNTOUCHED - NO MEMORY")
+  end)
+
+  addFail("ping", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    hop 1  * --x  TIMEOUT",
+      "    hop 2  x      NO ROUTE",
+      "    loss  " .. failbar(16) .. "  100%",
+    }, "PING UNREACHABLE - NO MEMORY")
+  end)
+
+  addFail("whistle", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    call  x    x    x    x  MUTE",
+      "    tx    " .. failbar(0) .. "  UNSENT",
+    }, "BEACON UNSENT - NO MEMORY")
+  end)
+
+  addFail("contagion", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "        A x    x B",
+      "          |      |",
+      "        C x    x D",
+      "    spread " .. failbar(0) .. "  0%",
+      "    hosts  0 / 4  CLEAN",
+    }, "PAYLOAD NOT SEEDED - NO MEMORY")
+  end)
+
+  addFail("sonic", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "     2k  x",
+      "     4k  x",
+      "     8k  x",
+      "    hz    " .. failbar(0) .. "  MUTE",
+    }, "SONIC BURST ABORTED - NO MEMORY")
+  end)
+
+  addFail("backup", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    node  *  x  *  x  *",
+      "    call  " .. failbar(0) .. "  UNSENT",
+      "    units 0 / 3  NONE",
+    }, "BACKUP NOT CALLED - NO MEMORY")
+  end)
+
+  addFail("camera", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    feed  +----------------+",
+      "          |  STILL LIVE X  |",
+      "          +----------------+",
+      "    link  " .. failbar(16) .. "  UP",
+    }, "CAMERA STILL LIVE - NO MEMORY")
+  end)
+
+  addFail("turret", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    aim   --x--  NO LOCK",
+      "    iff   " .. failbar(16) .. "  INTACT",
+      "    fire  " .. failbar(0) .. "  HOLD",
+    }, "TURRET UNTOUCHED - NO MEMORY")
+  end)
+
+  addFail("distract", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    decoy x     x     x  DEAD",
+      "    noise " .. failbar(0) .. "  MUTE",
+    }, "DECOY UNSENT - NO MEMORY")
+  end)
+
+  addFail("explode", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    cell  [##X.] [##X.] [##X.]  HOLD",
+      "    arm   " .. failbar(0) .. "  COLD",
+    }, "CHARGE NOT ARMED - NO MEMORY")
+  end)
+
+  addFail("vehicle", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    can   ECU --x-- BRK  INTACT",
+      "    ctl   " .. failbar(0) .. "  NO TAKE",
+    }, "VEHICLE BUS UNTOUCHED - NO MEMORY")
+  end)
+
+  addFail("unlock", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    latch [<<<<<<X........]  SEALED",
+      "    bolt  " .. failbar(16) .. "  LOCKED",
+    }, "LATCH STILL SEALED - NO MEMORY")
+  end)
+
+  addFail("overload", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    railA " .. failbar(2) .. "  NOMINAL",
+      "    draw  " .. failbar(0) .. "  NO SURGE",
+    }, "RAILS NOT OVERLOADED - NO MEMORY")
+  end)
+
+  addFail("control", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    ICE   ################",
+      "          ################  SEALED",
+      "    hole  " .. failbar(0) .. "  CLOSED",
+    }, "ICE WALL INTACT - NO MEMORY")
+  end)
+
+  addFail("generic", function(title, available, cost)
+    local ram, need = ramPair(available, cost)
+    return failScript(title, {
+      ram,
+      need,
+      "    path  * --x  *    *",
+      "    job   " .. failbar(0) .. "  ABORT",
+      "    ret   0x0C  FAIL",
+    }, "EXECUTION REFUSED - NO MEMORY")
+  end)
+
   local function write(title)
     local family = familyOf(title)
     local variants = CATALOG[family]
@@ -710,7 +1035,16 @@ local function create()
     return variants[math.random(1, #variants)](title)
   end
 
-  return write
+  local function writeFail(title, available, cost)
+    local family = familyOf(title)
+    local variants = FAIL[family]
+    if variants == nil then
+      variants = FAIL.generic
+    end
+    return variants[math.random(1, #variants)](title, available, cost)
+  end
+
+  return { write = write, writeFail = writeFail }
 end
 
-return { write = create() }
+return create()

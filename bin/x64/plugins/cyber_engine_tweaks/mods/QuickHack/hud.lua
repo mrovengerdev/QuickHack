@@ -12,6 +12,9 @@ local SLOT_W = 76
 local STRIDE = 84
 local BAR_W = 748
 local BAR_H = 114
+local MIN_SCALE = 0.70
+local MAX_SCALE = 1.50
+local barScale = 1.0
 local FILL_OPACITY = 0.15
 local MAIN_COLORS = "base\\gameplay\\gui\\common\\main_colors.inkstyle"
 local NUMBER_TINT = nil
@@ -57,8 +60,30 @@ local function bindingLabel(index)
   return name
 end
 
+local function clamp(value, low, high)
+  if value < low then
+    return low
+  end
+  if value > high then
+    return high
+  end
+  return value
+end
+
+local function sc(n)
+  return n * barScale
+end
+
+local function scInt(n)
+  local v = math.floor(n * barScale + 0.5)
+  if v < 1 then
+    return 1
+  end
+  return v
+end
+
 local function bindingFontSize(label)
-  return 18
+  return scInt(18)
 end
 
 local function applyBinding(slot)
@@ -84,7 +109,7 @@ local function applyBinding(slot)
   pcall(function()
     local fallback = tostring(slot.index)
     slot.number:SetText(fallback)
-    slot.number:SetFontSize(18)
+    slot.number:SetFontSize(scInt(18))
     slot.bindLabel = fallback
   end)
 end
@@ -159,7 +184,7 @@ local function applyIcon(slot, command)
   slot.icon = nil
   slot.iconKey = nil
   local okLib, reason = pcall(function()
-    return QuickHackIcons.LibraryReason(inkController or inkSpawner, canvas, command, slot.index, slot.x + 10, ICON_Y, ICON)
+    return QuickHackIcons.LibraryReason(inkController or inkSpawner, canvas, command, slot.index, slot.x + sc(10), sc(ICON_Y), scInt(ICON))
   end)
   if not okLib then
     reason = "error " .. tostring(reason)
@@ -301,6 +326,138 @@ local function eachEdge(slot, fn)
   end
 end
 
+local function currentScale()
+  local scale = 1.0
+  pcall(function()
+    local Stream = require("stream")
+    if type(Stream) == "table" and type(Stream.barScale) == "function" then
+      scale = Stream.barScale()
+    end
+  end)
+  if type(scale) ~= "number" then
+    scale = 1.0
+  end
+  return clamp(scale, MIN_SCALE, MAX_SCALE)
+end
+
+local function layoutSlot(slot, ox)
+  if slot == nil then
+    return
+  end
+  ox = ox or 0
+  local x = sc((slot.index - 1) * STRIDE)
+  slot.x = x
+  local frameX = x + sc(8) + ox
+  local frameY = sc(ICON_Y - 2)
+  local frameW = sc(ICON + 4)
+  local frameH = sc(ICON + 4)
+  local thickness = scInt(2)
+  if slot.fill ~= nil then
+    place(slot.fill, frameX, frameY, frameW, frameH)
+  end
+  if slot.edges ~= nil then
+    if slot.edges[1] ~= nil then
+      place(slot.edges[1], frameX, frameY, frameW, thickness)
+    end
+    if slot.edges[2] ~= nil then
+      place(slot.edges[2], frameX, frameY + frameH - thickness, frameW, thickness)
+    end
+    if slot.edges[3] ~= nil then
+      place(slot.edges[3], frameX, frameY, thickness, frameH)
+    end
+    if slot.edges[4] ~= nil then
+      place(slot.edges[4], frameX + frameW - thickness, frameY, thickness, frameH)
+    end
+  end
+  local textX = x + ox
+  if slot.ramText ~= nil then
+    place(slot.ramText, textX, sc(RAM_Y), sc(SLOT_W), sc(16))
+    slot.ramText:SetFontSize(scInt(14))
+  end
+  if slot.number ~= nil then
+    place(slot.number, textX, sc(NUMBER_Y), sc(SLOT_W), sc(18))
+    slot.number:SetFontSize(scInt(18))
+  end
+  if slot.title ~= nil then
+    place(slot.title, textX, sc(TITLE_Y), sc(SLOT_W), sc(30))
+    slot.title:SetFontSize(scInt(13))
+    pcall(function()
+      slot.title:SetWrapping(true, sc(SLOT_W))
+    end)
+  end
+  if slot.icon ~= nil then
+    pcall(function()
+      place(slot.icon, x + sc(10) + ox, sc(ICON_Y), sc(ICON), sc(ICON))
+    end)
+  end
+end
+
+local function layoutOverflow()
+  if overflow == nil then
+    return
+  end
+  place(overflow, sc(756), sc(NUMBER_Y), sc(SLOT_W), sc(18))
+  overflow:SetFontSize(scInt(18))
+end
+
+local function layoutBar()
+  if canvas ~= nil then
+    pcall(function()
+      canvas:SetSize(Vector2.new({ X = sc(BAR_W), Y = sc(BAR_H) }))
+    end)
+  end
+  local i = 1
+  while i <= SLOT_COUNT do
+    if slots[i] ~= nil then
+      slots[i].fx = nil
+      layoutSlot(slots[i], 0)
+      slots[i].iconKey = nil
+    end
+    i = i + 1
+  end
+  layoutOverflow()
+end
+
+local function applyFx(slot)
+  local fx = slot.fx
+  if fx == nil then
+    return
+  end
+  local t = fx.t
+  local dur = fx.dur
+  if fx.kind == "fail" then
+    local decay = 1 - (t / dur)
+    local ox = math.sin(t * 42) * sc(7) * decay
+    layoutSlot(slot, ox)
+    return
+  end
+  layoutSlot(slot, 0)
+  local w = 0.5 * (1 - math.cos(t / dur * 4 * math.pi))
+  if slot.fill ~= nil then
+    slot.fill:SetOpacity(FILL_OPACITY + 0.45 * w)
+  end
+  eachEdge(slot, function(edge)
+    edge:SetOpacity(0.75 + 0.25 * w)
+  end)
+  if slot.icon ~= nil then
+    pcall(function()
+      slot.icon:SetOpacity(1.0 - 0.55 * w)
+    end)
+  end
+end
+
+local function ramState(cost)
+  local available = availableRam()
+  local unaffordable = available ~= nil and cost > available
+  if unaffordable then
+    local okPay, canPay = pcall(canPayWithHealth, Game.GetPlayer(), cost, available)
+    if okPay and canPay == true then
+      unaffordable = false
+    end
+  end
+  return available, unaffordable
+end
+
 local function paintRam(slot, command)
   if slot.ramText == nil then
     return
@@ -312,14 +469,7 @@ local function paintRam(slot, command)
     return
   end
   slot.ramText:SetText(tostring(cost))
-  local available = availableRam()
-  local unaffordable = available ~= nil and cost > available
-  if unaffordable then
-    local okPay, canPay = pcall(canPayWithHealth, Game.GetPlayer(), cost, available)
-    if okPay and canPay == true then
-      unaffordable = false
-    end
-  end
+  local available, unaffordable = ramState(cost)
   gameTint(slot.ramText, unaffordable)
   gameTint(slot.number, unaffordable)
   gameTint(slot.title, unaffordable)
@@ -413,6 +563,7 @@ local function showSlot(slot, command)
 end
 
 local function build()
+  barScale = currentScale()
   local layer = Game.GetInkSystem():GetLayer(CName.new("inkHUDLayer"))
   if layer == nil then
     return false
@@ -430,7 +581,7 @@ local function build()
   hosted = false
   if inkController ~= nil then
     local okBar, bar = pcall(function()
-      return QuickHackIcons.MakeBar(inkController, BAR_W, BAR_H, 128.0)
+      return QuickHackIcons.MakeBar(inkController, sc(BAR_W), sc(BAR_H), 128.0)
     end)
     if okBar and bar ~= nil then
       canvas = bar
@@ -449,7 +600,7 @@ local function build()
     canvas:SetAnchor(inkEAnchor.BottomCenter)
     canvas:SetAnchorPoint(Vector2.new({ X = 0.5, Y = 1.0 }))
     canvas:SetMargin(inkMargin.new({ left = 0.0, top = 0.0, right = 0.0, bottom = 128.0 }))
-    canvas:SetSize(Vector2.new({ X = BAR_W, Y = BAR_H }))
+    canvas:SetSize(Vector2.new({ X = sc(BAR_W), Y = sc(BAR_H) }))
     canvas:SetVisible(false)
     local host = window
     if inkHost ~= nil then
@@ -528,12 +679,15 @@ local function build()
       bindLabel = nil,
       index = i,
       x = x,
+      fx = nil,
     }
+    layoutSlot(slots[i], 0)
     applyBinding(slots[i])
     i = i + 1
   end
 
   overflow = makeText(756, NUMBER_Y, SLOT_W, 18, 18, NUMBER_TINT, "")
+  layoutOverflow()
   built = true
   return true
 end
@@ -687,6 +841,72 @@ end
 
 function Hud.destroy()
   teardown()
+end
+
+function Hud.setScale(scale)
+  if type(scale) ~= "number" then
+    return
+  end
+  scale = clamp(scale, MIN_SCALE, MAX_SCALE)
+  if built and math.abs(scale - barScale) < 0.0005 then
+    return
+  end
+  barScale = scale
+  if built then
+    layoutBar()
+    lastGen = -1
+  end
+end
+
+function Hud.canAfford(command)
+  local cost = readCost(command)
+  if cost == nil then
+    return true, nil, nil
+  end
+  local available, unaffordable = ramState(cost)
+  return not unaffordable, available, cost
+end
+
+function Hud.feedback(index, ok)
+  if not built or type(index) ~= "number" then
+    return
+  end
+  local slot = slots[index]
+  if slot == nil or slot.number == nil then
+    return
+  end
+  local visible = false
+  pcall(function()
+    visible = slot.number:IsVisible()
+  end)
+  if not visible then
+    return
+  end
+  slot.fx = {
+    kind = ok and "ok" or "fail",
+    t = 0,
+    dur = ok and 0.45 or 0.40,
+  }
+end
+
+function Hud.tick(dt)
+  if not built or dt == nil then
+    return
+  end
+  local i = 1
+  while i <= SLOT_COUNT do
+    local slot = slots[i]
+    if slot ~= nil and slot.fx ~= nil then
+      slot.fx.t = slot.fx.t + dt
+      if slot.fx.t >= slot.fx.dur then
+        layoutSlot(slot, 0)
+        slot.fx = nil
+      else
+        applyFx(slot)
+      end
+    end
+    i = i + 1
+  end
 end
 
 return Hud

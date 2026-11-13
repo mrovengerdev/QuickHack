@@ -9,8 +9,13 @@ local CHARS_PER_SEC = 1500
 local MIN_CPS = 80
 local MAX_CPS = 2500
 local SCROLL_PX_PER_SEC = 18
+local MIN_SCROLL = 4
+local MAX_SCROLL = 80
+local BAR_SCALE = 1.0
+local MIN_SCALE = 0.70
+local MAX_SCALE = 1.50
 local CFG = "bin/x64/plugins/cyber_engine_tweaks/mods/QuickHack/stream.cfg"
-local CFG_VER = 2
+local CFG_VER = 3
 local FONT = "base\\gameplay\\gui\\fonts\\industry\\industry.inkfontfamily"
 
 local color = { r = 1.5, g = 0.0, b = 0.0 }
@@ -48,7 +53,7 @@ local function saveCfg()
   if file == nil then
     return
   end
-  file:write(string.format("v%d %.4f %.4f %.4f %.4f %.1f stream=%d bar=%d\n", CFG_VER, color.r, color.g, color.b, opacity, CHARS_PER_SEC, streamOn and 1 or 0, barOn and 1 or 0))
+  file:write(string.format("v%d %.4f %.4f %.4f %.4f %.1f scroll=%.1f scale=%.3f stream=%d bar=%d\n", CFG_VER, color.r, color.g, color.b, opacity, CHARS_PER_SEC, SCROLL_PX_PER_SEC, BAR_SCALE, streamOn and 1 or 0, barOn and 1 or 0))
   file:close()
 end
 
@@ -70,16 +75,23 @@ local function loadCfg()
     saveCfg()
     return
   end
-  if tonumber(ver) < CFG_VER then
-    saveCfg()
-    return
-  end
   color.r = clamp(tonumber(r) or color.r, 0, 1.5)
   color.g = clamp(tonumber(g) or color.g, 0, 1.5)
   color.b = clamp(tonumber(b) or color.b, 0, 1.5)
   opacity = clamp(tonumber(a) or opacity, 0.15, 1)
   if s ~= nil and s ~= "" then
     CHARS_PER_SEC = clamp(tonumber(s) or CHARS_PER_SEC, MIN_CPS, MAX_CPS)
+  end
+  local scroll = string.match(text or "", "scroll=([%d%.]+)")
+  if scroll ~= nil then
+    SCROLL_PX_PER_SEC = clamp(tonumber(scroll) or SCROLL_PX_PER_SEC, MIN_SCROLL, MAX_SCROLL)
+  end
+  local scale = string.match(text or "", "scale=([%d%.]+)")
+  if scale ~= nil then
+    BAR_SCALE = clamp(tonumber(scale) or BAR_SCALE, MIN_SCALE, MAX_SCALE)
+  end
+  if tonumber(ver) < CFG_VER or scroll == nil or scale == nil then
+    saveCfg()
   end
 end
 
@@ -202,6 +214,7 @@ local function titleOf(command)
 end
 
 local writeScript
+local writeFailScript
 do
   local function asWriter(ok, result)
     if not ok then
@@ -211,6 +224,9 @@ do
       return result
     end
     if type(result) == "table" and type(result.write) == "function" then
+      if type(result.writeFail) == "function" then
+        writeFailScript = result.writeFail
+      end
       return result.write
     end
     return nil
@@ -314,6 +330,23 @@ end
 local queue = {}
 
 local scriptErrorPrinted = false
+
+function Stream.pushFail(command, available, cost)
+  if not streamOn or command == nil or writeFailScript == nil then
+    return
+  end
+  local ok, lines = pcall(function()
+    return writeFailScript(titleOf(command), available, cost)
+  end)
+  if not ok or type(lines) ~= "table" or #lines < 1 then
+    return
+  end
+  if active == nil then
+    active = { lines = lines, index = 1 }
+    return
+  end
+  queue[#queue + 1] = lines
+end
 
 function Stream.push(command)
   if not streamOn or command == nil then
@@ -426,8 +459,8 @@ function Stream.drawSettings()
   if ImGui == nil or Cast.isOverlay() ~= true then
     return
   end
-  local function slider(label, value, low, high)
-    local nextValue, used = ImGui.SliderFloat(label, value, low, high, "%.3f")
+  local function slider(label, value, low, high, fmt)
+    local nextValue, used = ImGui.SliderFloat(label, value, low, high, fmt or "%.3f")
     if type(nextValue) ~= "number" and type(used) == "number" then
       nextValue, used = used, nextValue
     end
@@ -479,6 +512,26 @@ function Stream.drawSettings()
       changed = true
     end
     ImGui.Text(string.format("Chars / sec: %.0f", CHARS_PER_SEC))
+    local nscroll, scrollOk = slider("Scroll speed##rate", SCROLL_PX_PER_SEC, MIN_SCROLL, MAX_SCROLL, "%.0f")
+    if scrollOk then
+      SCROLL_PX_PER_SEC = clamp(nscroll, MIN_SCROLL, MAX_SCROLL)
+      changed = true
+    end
+    ImGui.Text(string.format("Pixels / sec: %.0f", SCROLL_PX_PER_SEC))
+    ImGui.Separator()
+    ImGui.Text("Quickhack bar size")
+    local nscale, scaleOk = slider("Bar size##scale", BAR_SCALE, MIN_SCALE, MAX_SCALE, "%.2f")
+    if scaleOk then
+      BAR_SCALE = clamp(nscale, MIN_SCALE, MAX_SCALE)
+      changed = true
+      pcall(function()
+        local Hud = require("hud")
+        if type(Hud) == "table" and type(Hud.setScale) == "function" then
+          Hud.setScale(BAR_SCALE)
+        end
+      end)
+    end
+    ImGui.Text(string.format("Size: %.0f%%", BAR_SCALE * 100))
     if ImGui.Button("RED") then
       color.r, color.g, color.b = 1.5, 0.0, 0.0
       changed = true
@@ -530,6 +583,10 @@ end
 
 function Stream.isBarOn()
   return barOn
+end
+
+function Stream.barScale()
+  return BAR_SCALE
 end
 
 function Stream.setStreamOn(on)
