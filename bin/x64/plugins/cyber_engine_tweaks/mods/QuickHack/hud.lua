@@ -206,72 +206,6 @@ local function availableRam()
   return nil
 end
 
-local OVERCLOCK_BUFF = "BaseStatusEffect.Intelligence_Central_Milestone_3_Overclock_Buff"
-
-local function rawPool(player, pool)
-  if player == nil then
-    return nil
-  end
-  local ok, value = pcall(function()
-    return Game.GetStatPoolsSystem():GetStatPoolValue(player:GetEntityID(), pool, false)
-  end)
-  if ok and type(value) == "number" then
-    return value
-  end
-  return nil
-end
-
-local function hasOverclock(player)
-  if player == nil then
-    return false
-  end
-  local ok, active = pcall(function()
-    return Game.GetStatusEffectSystem():HasStatusEffect(player:GetEntityID(), TweakDBID.new(OVERCLOCK_BUFF))
-  end)
-  return ok and active == true
-end
-
-local function canPayWithHealth(player, cost, memory)
-  if player == nil or type(cost) ~= "number" or type(memory) ~= "number" then
-    return false
-  end
-  if not hasOverclock(player) then
-    return false
-  end
-  local shortfall = cost - memory
-  if shortfall <= 0 then
-    return true
-  end
-  local okRate, rate = pcall(function()
-    return Game.GetStatsSystem():GetStatValue(player:GetEntityID(), gamedataStatType.OverclockedStateHealthCost)
-  end)
-  local health = rawPool(player, gamedataStatPoolType.Health)
-  if not okRate or type(rate) ~= "number" or health == nil then
-    return false
-  end
-  return health - rate * shortfall > 0
-end
-
-local function canAfford(command)
-  local cost = readCost(command)
-  if cost == nil then
-    return false
-  end
-  if cost <= 0 then
-    return true
-  end
-  local player = Game.GetPlayer()
-  local memory = rawPool(player, gamedataStatPoolType.Memory)
-  if memory ~= nil then
-    if memory >= cost then
-      return true
-    end
-    return canPayWithHealth(player, cost, memory)
-  end
-  local available = availableRam()
-  return available == nil or cost <= available
-end
-
 local function readCost(command)
   local ok, cost = pcall(function()
     return QuickHackIcons.CostOf(command)
@@ -337,7 +271,8 @@ local function paintRam(slot, command)
     return
   end
   slot.ramText:SetText(tostring(cost))
-  local unaffordable = not canAfford(command)
+  local available = availableRam()
+  local unaffordable = available ~= nil and cost > available
   gameTint(slot.ramText, unaffordable)
   gameTint(slot.number, unaffordable)
   gameTint(slot.title, unaffordable)
