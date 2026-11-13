@@ -7,10 +7,10 @@ local TOP = 150
 local WIDTH = 720
 local CHARS_PER_SEC = 1500
 local MIN_CPS = 80
-local MAX_CPS = 2500
+local MAX_CPS = 5000
 local SCROLL_PX_PER_SEC = 18
 local MIN_SCROLL = 4
-local MAX_SCROLL = 80
+local MAX_SCROLL = 500
 local BAR_SCALE = 1.0
 local MIN_SCALE = 0.70
 local MAX_SCALE = 1.50
@@ -418,27 +418,41 @@ function Stream.tick(dt)
   if step < 1 then
     step = 1
   end
-  if active == nil and #queue > 0 then
-    active = { lines = table.remove(queue, 1), index = 1 }
-  end
-  if active ~= nil then
+  local budget = step
+  local guard = 0
+  while budget > 0 and guard < 64 do
+    guard = guard + 1
+    if active == nil then
+      if #queue == 0 then
+        break
+      end
+      active = { lines = table.remove(queue, 1), index = 1 }
+    end
     local line = active.lines[active.index]
     if type(line) ~= "string" then
       active = nil
-    else
+      break
+    end
     local current = jobs[#jobs]
     if current == nil or current.text ~= line then
       pushLine(line)
       current = jobs[#jobs]
     end
-    current.shown = current.shown + step
-    if current.shown >= #line then
+    local need = #line - current.shown
+    if need < 1 then
+      need = 1
+    end
+    if budget >= need then
       current.shown = #line
+      budget = budget - need
       active.index = active.index + 1
       if active.index > #active.lines then
         active = nil
+        break
       end
-    end
+    else
+      current.shown = current.shown + budget
+      budget = 0
     end
   end
   local i = 1
@@ -472,20 +486,68 @@ function Stream.drawSettings()
     end
     return value, false
   end
-  ImGui.SetNextWindowSize(360, 180, ImGuiCond.FirstUseEver)
+  local function section(title)
+    ImGui.Spacing()
+    ImGui.Text(title)
+    ImGui.Separator()
+  end
+  local function label(text)
+    ImGui.Spacing()
+    ImGui.Text(text)
+  end
+  ImGui.SetNextWindowSize(380, 200, ImGuiCond.FirstUseEver)
   local visible = ImGui.Begin("QuickHack stream", ImGuiWindowFlags.AlwaysAutoResize)
   if visible ~= false then
-    local streamNext, streamHit = ImGui.Checkbox("Netrunner console output", streamOn)
-    if type(streamNext) == "boolean" and (streamHit == true or streamNext ~= streamOn) and streamNext ~= streamOn then
-      Stream.setStreamOn(streamNext)
-    end
-    local barNext, barHit = ImGui.Checkbox("Netrunner quickhack bar", barOn)
+    local changed = false
+
+    section("QUICKHACK BAR")
+    local barNext, barHit = ImGui.Checkbox("Show quickhack bar", barOn)
     if type(barNext) == "boolean" and (barHit == true or barNext ~= barOn) and barNext ~= barOn then
       Stream.setBarOn(barNext)
     end
-    ImGui.Separator()
-    ImGui.Text("Left-side code color, opacity, and write speed")
-    local changed = false
+    label("Size")
+    local nscale, scaleOk = slider("Bar size##scale", BAR_SCALE, MIN_SCALE, MAX_SCALE, "%.2f")
+    if scaleOk then
+      BAR_SCALE = clamp(nscale, MIN_SCALE, MAX_SCALE)
+      changed = true
+      pcall(function()
+        local Hud = require("hud")
+        if type(Hud) == "table" and type(Hud.setScale) == "function" then
+          Hud.setScale(BAR_SCALE)
+        end
+      end)
+    end
+    ImGui.Text(string.format("%.0f%% of default", BAR_SCALE * 100))
+
+    ImGui.Spacing()
+    section("QUICKHACK CONSOLE")
+    local streamNext, streamHit = ImGui.Checkbox("Show console output", streamOn)
+    if type(streamNext) == "boolean" and (streamHit == true or streamNext ~= streamOn) and streamNext ~= streamOn then
+      Stream.setStreamOn(streamNext)
+    end
+
+    label("Color presets")
+    if ImGui.Button("RED") then
+      color.r, color.g, color.b = 1.5, 0.0, 0.0
+      changed = true
+    end
+    ImGui.SameLine()
+    if ImGui.Button("TEAL") then
+      color.r, color.g, color.b = 0.0, 1.5, 1.15
+      changed = true
+    end
+    ImGui.SameLine()
+    if ImGui.Button("GREEN") then
+      color.r, color.g, color.b = 0.0, 1.5, 0.0
+      changed = true
+    end
+    ImGui.SameLine()
+    if ImGui.Button("YELLOW") then
+      color.r, color.g, color.b = 1.5, 1.5, 0.0
+      changed = true
+    end
+
+    label("Custom color")
     local nr, rOk = slider("Red##chan", color.r, 0.0, 1.5)
     if rOk then
       color.r = nr
@@ -506,51 +568,19 @@ function Stream.drawSettings()
       opacity = na
       changed = true
     end
-    local ns, sOk = slider("Write speed##rate", CHARS_PER_SEC, MIN_CPS, MAX_CPS)
+
+    label("Speed")
+    local ns, sOk = slider("Write (chars/sec)##rate", CHARS_PER_SEC, MIN_CPS, MAX_CPS, "%.0f")
     if sOk then
       CHARS_PER_SEC = clamp(ns, MIN_CPS, MAX_CPS)
       changed = true
     end
-    ImGui.Text(string.format("Chars / sec: %.0f", CHARS_PER_SEC))
-    local nscroll, scrollOk = slider("Scroll speed##rate", SCROLL_PX_PER_SEC, MIN_SCROLL, MAX_SCROLL, "%.0f")
+    local nscroll, scrollOk = slider("Scroll (pixels/sec)##rate", SCROLL_PX_PER_SEC, MIN_SCROLL, MAX_SCROLL, "%.0f")
     if scrollOk then
       SCROLL_PX_PER_SEC = clamp(nscroll, MIN_SCROLL, MAX_SCROLL)
       changed = true
     end
-    ImGui.Text(string.format("Pixels / sec: %.0f", SCROLL_PX_PER_SEC))
-    ImGui.Separator()
-    ImGui.Text("Quickhack bar size")
-    local nscale, scaleOk = slider("Bar size##scale", BAR_SCALE, MIN_SCALE, MAX_SCALE, "%.2f")
-    if scaleOk then
-      BAR_SCALE = clamp(nscale, MIN_SCALE, MAX_SCALE)
-      changed = true
-      pcall(function()
-        local Hud = require("hud")
-        if type(Hud) == "table" and type(Hud.setScale) == "function" then
-          Hud.setScale(BAR_SCALE)
-        end
-      end)
-    end
-    ImGui.Text(string.format("Size: %.0f%%", BAR_SCALE * 100))
-    if ImGui.Button("RED") then
-      color.r, color.g, color.b = 1.5, 0.0, 0.0
-      changed = true
-    end
-    ImGui.SameLine()
-    if ImGui.Button("TEAL") then
-      color.r, color.g, color.b = 0.0, 1.5, 1.15
-      changed = true
-    end
-    ImGui.SameLine()
-    if ImGui.Button("GREEN") then
-      color.r, color.g, color.b = 0.0, 1.5, 0.0
-      changed = true
-    end
-    ImGui.SameLine()
-    if ImGui.Button("YELLOW") then
-      color.r, color.g, color.b = 1.5, 1.5, 0.0
-      changed = true
-    end
+
     if changed then
       applyStyle()
       saveCfg()
