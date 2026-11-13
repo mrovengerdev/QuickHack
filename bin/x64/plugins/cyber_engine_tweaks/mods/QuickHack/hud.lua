@@ -206,6 +206,47 @@ local function availableRam()
   return nil
 end
 
+local OVERCLOCK_BUFF = "BaseStatusEffect.Intelligence_Central_Milestone_3_Overclock_Buff"
+
+local function hasOverclock(player)
+  if player == nil then
+    return false
+  end
+  local ok, active = pcall(function()
+    return QuickHackableHelper.IsOverclockedStateActive(player)
+  end)
+  if ok then
+    return active == true
+  end
+  ok, active = pcall(function()
+    return Game.GetStatusEffectSystem():HasStatusEffect(player:GetEntityID(), TweakDBID.new(OVERCLOCK_BUFF))
+  end)
+  return ok and active == true
+end
+
+local function canPayWithHealth(player, cost, memory)
+  if player == nil or type(cost) ~= "number" or type(memory) ~= "number" then
+    return false
+  end
+  if not hasOverclock(player) then
+    return false
+  end
+  local shortfall = cost - memory
+  if shortfall <= 0 then
+    return true
+  end
+  local okRate, rate = pcall(function()
+    return Game.GetStatsSystem():GetStatValue(player:GetEntityID(), gamedataStatType.OverclockedStateHealthCost)
+  end)
+  local okHealth, health = pcall(function()
+    return Game.GetStatPoolsSystem():GetStatPoolValue(player:GetEntityID(), gamedataStatPoolType.Health, false)
+  end)
+  if not okRate or not okHealth or type(rate) ~= "number" or type(health) ~= "number" then
+    return false
+  end
+  return health - rate * shortfall > 0
+end
+
 local function readCost(command)
   local ok, cost = pcall(function()
     return QuickHackIcons.CostOf(command)
@@ -273,6 +314,12 @@ local function paintRam(slot, command)
   slot.ramText:SetText(tostring(cost))
   local available = availableRam()
   local unaffordable = available ~= nil and cost > available
+  if unaffordable then
+    local okPay, canPay = pcall(canPayWithHealth, Game.GetPlayer(), cost, available)
+    if okPay and canPay == true then
+      unaffordable = false
+    end
+  end
   gameTint(slot.ramText, unaffordable)
   gameTint(slot.number, unaffordable)
   gameTint(slot.title, unaffordable)
