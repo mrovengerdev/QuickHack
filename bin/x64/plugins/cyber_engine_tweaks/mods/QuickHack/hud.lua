@@ -30,6 +30,7 @@ local overflow = nil
 local twoRows = false
 local arranging = false
 local layoutKey = nil
+local heldRow = nil
 local built = false
 local lastGen = -1
 local inkController = nil
@@ -641,6 +642,12 @@ local function updateGhosts(list)
       elseif not arranging and slot.ghost then
         pcall(hideSlot, slot)
       end
+      if arranging and slot.ghost then
+        local glow = heldRow ~= nil and rowOf(i) == heldRow
+        eachEdge(slot, function(edge)
+          edge:SetOpacity(glow and 1.0 or 0.45)
+        end)
+      end
     end
     i = i + 1
   end
@@ -1023,6 +1030,149 @@ function Hud.tick(dt)
       end
     end
     i = i + 1
+  end
+end
+
+-- Click-and-drag arranging. CET's overlay owns the mouse while it is open,
+-- so an invisible full-screen ImGui window (kept behind the settings window)
+-- catches the press, picks the row of frames nearest the cursor, and moves
+-- that row's ink widgets by the mouse movement converted to HUD units.
+local drag = { row = nil, lastX = 0, lastY = 0 }
+local dragPrinted = false
+local dragErrorPrinted = false
+
+local function inkScale()
+  local ok, w, h = pcall(function()
+    return GetDisplayResolution()
+  end)
+  if not ok or type(w) ~= "number" or type(h) ~= "number" or w <= 0 or h <= 0 then
+    return nil
+  end
+  local s = h / 2160
+  if w / h < 16 / 9 then
+    s = w / 3840
+  end
+  return s, w, h
+end
+
+local function rowRect(row, s, w, h)
+  local rx, ry = rowOrigin(row)
+  local left = w * 0.5 - sc(BAR_W) * s * 0.5 + rx * s
+  local top = h - (128 + sc(BAR_H)) * s + ry * s
+  return left, top, sc(BAR_W) * s, sc(BAR_H + 12) * s
+end
+
+local function pickRow(mx, my, s, w, h)
+  local best = nil
+  local bestDist = nil
+  local row = 1
+  while row <= 2 do
+    local left, top, width, height = rowRect(row, s, w, h)
+    local dx = 0
+    if mx < left then
+      dx = left - mx
+    elseif mx > left + width then
+      dx = mx - (left + width)
+    end
+    local dy = 0
+    if my < top then
+      dy = top - my
+    elseif my > top + height then
+      dy = my - (top + height)
+    end
+    local dist = dx * dx + dy * dy
+    if bestDist == nil or dist < bestDist then
+      best = row
+      bestDist = dist
+    end
+    row = row + 1
+  end
+  if bestDist ~= nil and bestDist > (sc(ROW_GAP) * s * 2) ^ 2 then
+    return nil
+  end
+  return best
+end
+
+function Hud.drawDrag()
+  if ImGui == nil or not built then
+    return
+  end
+  local okCast, isOpen = pcall(function()
+    return require("cast").isOverlay() == true
+  end)
+  if not okCast or not isOpen then
+    drag.row = nil
+    heldRow = nil
+    return
+  end
+  local s, w, h = inkScale()
+  if s == nil then
+    return
+  end
+  local flags = ImGuiWindowFlags.NoTitleBar + ImGuiWindowFlags.NoResize + ImGuiWindowFlags.NoMove
+    + ImGuiWindowFlags.NoScrollbar + ImGuiWindowFlags.NoCollapse + ImGuiWindowFlags.NoSavedSettings
+    + ImGuiWindowFlags.NoBackground + ImGuiWindowFlags.NoBringToFrontOnFocus + ImGuiWindowFlags.NoFocusOnAppearing
+  ImGui.SetNextWindowPos(0, 0, ImGuiCond.Always)
+  ImGui.SetNextWindowSize(w, h, ImGuiCond.Always)
+  local pushed = pcall(function()
+    ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 0, 0)
+  end)
+  local visible = ImGui.Begin("##QuickHackDrag", flags)
+  local okBody, bodyErr = pcall(function()
+    if visible == false then
+      return
+    end
+    ImGui.SetCursorPos(0, 0)
+    ImGui.InvisibleButton("##QuickHackDragArea", w, h)
+    local active = ImGui.IsItemActive() == true
+    local mx, my = ImGui.GetMousePos()
+    if type(mx) ~= "number" or type(my) ~= "number" then
+      return
+    end
+    if active and drag.row == nil and drag.idle ~= true then
+      drag.row = pickRow(mx, my, s, w, h)
+      drag.idle = drag.row == nil
+      drag.lastX = mx
+      drag.lastY = my
+      heldRow = drag.row
+      if not dragPrinted then
+        dragPrinted = true
+        local l, t, rw, rh = rowRect(drag.row or 1, s, w, h)
+        print(string.format("QuickHack: drag res %dx%d scale %.4f mouse %.0f,%.0f row %s rect %.0f,%.0f %.0fx%.0f", w, h, s, mx, my, tostring(drag.row), l, t, rw, rh))
+      end
+    elseif active and drag.row ~= nil then
+      local dx = mx - drag.lastX
+      local dy = my - drag.lastY
+      if dx ~= 0 or dy ~= 0 then
+        drag.lastX = mx
+        drag.lastY = my
+        local mod = streamMod()
+        if mod ~= nil and type(mod.rowXY) == "function" and type(mod.setRowPos) == "function" then
+          local rx, ry = mod.rowXY(drag.row)
+          mod.setRowPos(drag.row, rx + dx / s, ry + dy / s, false)
+        end
+      end
+    elseif not active then
+      if drag.row ~= nil then
+        local mod = streamMod()
+        if mod ~= nil and type(mod.saveRows) == "function" then
+          mod.saveRows()
+        end
+      end
+      drag.row = nil
+      drag.idle = false
+      heldRow = nil
+    end
+  end)
+  ImGui.End()
+  if pushed then
+    pcall(function()
+      ImGui.PopStyleVar(1)
+    end)
+  end
+  if not okBody and not dragErrorPrinted then
+    dragErrorPrinted = true
+    print("QuickHack: row drag failed: " .. tostring(bodyErr))
   end
 end
 

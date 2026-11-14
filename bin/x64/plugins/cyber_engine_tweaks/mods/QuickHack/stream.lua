@@ -544,15 +544,11 @@ function Stream.drawSettings()
     end
     ImGui.Text(string.format("%.0f%% of default", BAR_SCALE * 100))
     label("Position")
-    ImGui.Text("Both rows show as empty frames while this overlay is open.")
+    ImGui.Text("Click and drag a row of frames on screen to move it.")
     local ri = 1
     while ri <= 2 do
       local px, py = Stream.rowXY(ri)
-      local nx, xOk = slider("Row " .. ri .. " X##rowx" .. ri, px, ROW_X_MIN, ROW_X_MAX, "%.0f")
-      local ny, yOk = slider("Row " .. ri .. " Y##rowy" .. ri, py, ROW_Y_MIN, ROW_Y_MAX, "%.0f")
-      if xOk or yOk then
-        Stream.setRowPos(ri, math.floor(clamp(nx, ROW_X_MIN, ROW_X_MAX) + 0.5), math.floor(clamp(ny, ROW_Y_MIN, ROW_Y_MAX) + 0.5), true)
-      end
+      ImGui.Text(string.format("Row %d   X %.0f   Y %.0f", ri, px, py))
       ri = ri + 1
     end
     if ImGui.Button("Reset row positions") then
@@ -650,7 +646,7 @@ function Stream.setRowPos(index, x, y, save)
   if index ~= 1 and index ~= 2 or type(x) ~= "number" or type(y) ~= "number" then
     return
   end
-  rowPos[index] = { x = x, y = y }
+  rowPos[index] = { x = clamp(x, ROW_X_MIN, ROW_X_MAX), y = clamp(y, ROW_Y_MIN, ROW_Y_MAX) }
   if save then
     saveCfg()
   end
