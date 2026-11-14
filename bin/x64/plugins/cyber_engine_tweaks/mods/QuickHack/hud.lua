@@ -537,6 +537,30 @@ local function ramState(cost)
   return available, unaffordable
 end
 
+local seenLockReasons = {}
+
+-- The game's own quickhack list (the same data the scanner wheel uses) marks a
+-- hack unusable with m_isLocked and says why in m_inactiveReason: cooldown,
+-- already uploading, not enough RAM, and so on. Red whenever it does.
+local function gameLocked(command)
+  local ok, locked = pcall(function()
+    return command.m_isLocked == true
+  end)
+  if not ok or not locked then
+    return false
+  end
+  pcall(function()
+    local reason = tostring(command.m_inactiveReason)
+    local title = tostring(optionText(command))
+    local key = title .. "|" .. reason
+    if not seenLockReasons[key] then
+      seenLockReasons[key] = true
+      print("QuickHack: locked " .. title .. " reason " .. reason)
+    end
+  end)
+  return true
+end
+
 local function paintRam(slot, command)
   if slot.ramText == nil then
     return
@@ -549,6 +573,9 @@ local function paintRam(slot, command)
   end
   slot.ramText:SetText(tostring(cost))
   local available, unaffordable = ramState(cost)
+  if gameLocked(command) then
+    unaffordable = true
+  end
   gameTint(slot.ramText, unaffordable)
   gameTint(slot.number, unaffordable)
   gameTint(slot.title, unaffordable)
@@ -655,7 +682,7 @@ end
 
 local function showSlot(slot, command)
   slot.ghost = false
-  local opacity = command.m_isLocked and 0.4 or 1.0
+  local opacity = 1.0
   slot.number:SetOpacity(1.0)
   slot.title:SetOpacity(opacity)
   applyBinding(slot)
