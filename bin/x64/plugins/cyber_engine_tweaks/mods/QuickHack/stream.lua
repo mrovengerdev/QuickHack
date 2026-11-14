@@ -240,6 +240,7 @@ end
 
 local writeScript
 local writeFailScript
+local writeBlockedScript
 do
   local function asWriter(ok, result)
     if not ok then
@@ -251,6 +252,9 @@ do
     if type(result) == "table" and type(result.write) == "function" then
       if type(result.writeFail) == "function" then
         writeFailScript = result.writeFail
+      end
+      if type(result.writeBlocked) == "function" then
+        writeBlockedScript = result.writeBlocked
       end
       return result.write
     end
@@ -355,6 +359,44 @@ end
 local queue = {}
 
 local scriptErrorPrinted = false
+
+local function blockedReason(command)
+  local ok, text = pcall(function()
+    local raw = command.m_inactiveReason
+    if raw == nil then
+      return ""
+    end
+    raw = tostring(raw)
+    if raw ~= "" and type(GetLocalizedText) == "function" then
+      local okLoc, loc = pcall(GetLocalizedText, raw)
+      if okLoc and type(loc) == "string" and loc ~= "" then
+        return loc
+      end
+    end
+    return raw
+  end)
+  if ok and type(text) == "string" then
+    return text
+  end
+  return ""
+end
+
+function Stream.pushBlocked(command)
+  if not streamOn or command == nil or writeBlockedScript == nil then
+    return
+  end
+  local ok, lines = pcall(function()
+    return writeBlockedScript(titleOf(command), blockedReason(command))
+  end)
+  if not ok or type(lines) ~= "table" or #lines < 1 then
+    return
+  end
+  if active == nil then
+    active = { lines = lines, index = 1 }
+    return
+  end
+  queue[#queue + 1] = lines
+end
 
 function Stream.pushFail(command, available, cost)
   if not streamOn or command == nil or writeFailScript == nil then

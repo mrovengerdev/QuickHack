@@ -101,6 +101,23 @@ function Cast.tryCast(slotIndex)
   if command.m_isLocked then
     bail(slotIndex, "locked")
     notify(slotIndex, false)
+    -- Locked for a RAM shortage gets the RAM-fail output; anything else
+    -- (cooldown, already uploading, blocked) gets the blocked output.
+    local denied, available, cost = false, nil, nil
+    pcall(function()
+      denied, available, cost = ramDenied(command)
+    end)
+    pcall(function()
+      local streamMod = require("stream")
+      if type(streamMod) ~= "table" then
+        return
+      end
+      if denied and type(streamMod.pushFail) == "function" then
+        streamMod.pushFail(command, available, cost)
+      elseif type(streamMod.pushBlocked) == "function" then
+        streamMod.pushBlocked(command)
+      end
+    end)
     return
   end
 

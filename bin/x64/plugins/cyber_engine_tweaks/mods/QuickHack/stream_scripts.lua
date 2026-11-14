@@ -827,6 +827,37 @@ local function create()
     }
   end
 
+  -- The game refused the hack for a reason other than RAM: cooldown, already
+  -- uploading, blocked, and so on. Says so plainly so it is never read as a
+  -- RAM shortage.
+  local function writeBlocked(title, reason)
+    local family = familyOf(title)
+    local target = FAIL_TARGET[family] or FAIL_TARGET.generic
+    local caller = FAIL_CALLER[family] or (family .. ".run")
+    local base = math.random(0x10001000, 0x7FFF0000)
+    base = base - (base % 16)
+    local hex = function(n) return string.format("0x%08X", n) end
+    local why = reason
+    if type(why) ~= "string" or why == "" then
+      why = "UNKNOWN"
+    end
+    return {
+      "  $ qh exec " .. banner(title) .. " --at " .. hex(base),
+      "  ram    OK  -- not a memory fault",
+      "  !!!!!!!! FATAL: EXECUTION BLOCKED !!!!!!!!",
+      "  EBUSY    lock held on " .. target .. " at " .. hex(base),
+      "  reason   " .. string.upper(why),
+      "  trace",
+      "    #0  " .. hex(base) .. "  " .. target .. "+0x00   <-- LOCKED",
+      "    #1  " .. hex(base - 0x28) .. "  " .. caller .. "+0x1C",
+      "    #2  " .. hex(base - 0xA0) .. "  qh.exec+0x40",
+      "    #3  " .. hex(base - 0xB0) .. "  daemon.main",
+      "  !!!!!!!! BLOCKED  NOT A RAM ISSUE !!!!!!!!",
+      "  exit 16  EBUSY",
+      "  $",
+    }
+  end
+
   local function write(title)
     local family = familyOf(title)
     local variants = CATALOG[family]
@@ -836,7 +867,7 @@ local function create()
     return variants[math.random(1, #variants)](title)
   end
 
-  return { write = write, writeFail = writeFail }
+  return { write = write, writeFail = writeFail, writeBlocked = writeBlocked }
 end
 
 return create()
