@@ -1070,32 +1070,25 @@ local function rowRect(row, s, w, h)
 end
 
 local function pickRow(mx, my, s, w, h)
+  -- Each row's grab area is its frame band grown by PICK_PAD HUD units above
+  -- and below. When the areas of the two rows overlap, the row whose centre
+  -- is nearest wins, so the split falls at the midpoint between them.
+  local PICK_PAD = 40
   local best = nil
   local bestDist = nil
   local row = 1
   while row <= 2 do
     local left, top, width, height = rowRect(row, s, w, h)
-    local dx = 0
-    if mx < left then
-      dx = left - mx
-    elseif mx > left + width then
-      dx = mx - (left + width)
-    end
-    local dy = 0
-    if my < top then
-      dy = top - my
-    elseif my > top + height then
-      dy = my - (top + height)
-    end
-    local dist = dx * dx + dy * dy
-    if bestDist == nil or dist < bestDist then
-      best = row
-      bestDist = dist
+    local pad = PICK_PAD * s
+    if mx >= left - 8 * s and mx <= left + width + 8 * s
+      and my >= top - pad and my <= top + height + pad then
+      local dist = math.abs(my - (top + height * 0.5))
+      if bestDist == nil or dist < bestDist then
+        best = row
+        bestDist = dist
+      end
     end
     row = row + 1
-  end
-  if bestDist ~= nil and bestDist > (8 * s) ^ 2 then
-    return nil
   end
   return best
 end
