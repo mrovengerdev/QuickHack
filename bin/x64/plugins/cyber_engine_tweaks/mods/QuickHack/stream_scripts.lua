@@ -843,7 +843,7 @@ local function create()
     end
     return {
       "  $ qh exec " .. banner(title) .. " --at " .. hex(base),
-      "  ram    OK  -- not a memory fault",
+      "  lock   [################]",
       "  !!!!!!!! FATAL: EXECUTION BLOCKED !!!!!!!!",
       "  EBUSY    lock held on " .. target .. " at " .. hex(base),
       "  reason   " .. string.upper(why),
@@ -852,7 +852,7 @@ local function create()
       "    #1  " .. hex(base - 0x28) .. "  " .. caller .. "+0x1C",
       "    #2  " .. hex(base - 0xA0) .. "  qh.exec+0x40",
       "    #3  " .. hex(base - 0xB0) .. "  daemon.main",
-      "  !!!!!!!! BLOCKED  NOT A RAM ISSUE !!!!!!!!",
+      "  !!!!!!!! EXEC LOCK HELD  " .. string.upper(why) .. " !!!!!!!!",
       "  exit 16  EBUSY",
       "  $",
     }
