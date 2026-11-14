@@ -54,7 +54,7 @@ local ROW_GAP = 100
 local ROW_X_MIN = -1920
 local ROW_X_MAX = 1920
 local ROW_Y_MIN = -2040
-local ROW_Y_MAX = 128
+local ROW_Y_MAX = 2040
 
 local function rowToken(index)
   local pos = rowPos[index]
