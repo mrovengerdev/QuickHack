@@ -61,7 +61,7 @@ local function rowToken(index)
   if pos == nil then
     return ""
   end
-  return string.format(" p%d=%.1f,%.1f", index, pos.x, pos.y)
+  return string.format(" r%d=%.1f,%.1f", index, pos.x, pos.y)
 end
 
 local function saveCfg()
@@ -109,7 +109,7 @@ local function loadCfg()
   end
   local ri = 1
   while ri <= 2 do
-    local rx, ry = string.match(text or "", "%sp" .. ri .. "=(%-?[%d%.]+),(%-?[%d%.]+)")
+    local rx, ry = string.match(text or "", "%sr" .. ri .. "=(%-?[%d%.]+),(%-?[%d%.]+)")
     if rx ~= nil and tonumber(rx) ~= nil and tonumber(ry) ~= nil then
       rowPos[ri] = { x = tonumber(rx), y = tonumber(ry) }
     end
