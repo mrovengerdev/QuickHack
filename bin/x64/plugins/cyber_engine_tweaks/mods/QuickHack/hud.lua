@@ -1092,7 +1092,7 @@ local function pickRow(mx, my, s, w, h)
     end
     row = row + 1
   end
-  if bestDist ~= nil and bestDist > (sc(ICON) * s) ^ 2 then
+  if bestDist ~= nil and bestDist > (sc(BAR_W) * s) ^ 2 then
     return nil
   end
   return best
