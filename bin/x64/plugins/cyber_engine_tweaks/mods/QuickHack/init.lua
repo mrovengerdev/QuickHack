@@ -83,7 +83,7 @@ registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 88")
+  print("QuickHack ready build 89")
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -141,11 +141,6 @@ registerForEvent("onUpdate", function(dt)
 end)
 
 registerForEvent("onDraw", function()
-  if Stream.isBarOn() then
-    pcall(function()
-      Hud.drawDrag()
-    end)
-  end
   pcall(function()
     Stream.drawSettings()
   end)
