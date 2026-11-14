@@ -48,12 +48,24 @@ local function tint()
   })
 end
 
+-- Dragged bar row positions in ink units relative to the bar canvas; nil = default.
+local rowPos = {}
+
+local function rowToken(index)
+  local pos = rowPos[index]
+  if pos == nil then
+    return ""
+  end
+  return string.format(" r%d=%.1f,%.1f", index, pos.x, pos.y)
+end
+
 local function saveCfg()
   local file = io.open(CFG, "w")
   if file == nil then
     return
   end
-  file:write(string.format("v%d %.4f %.4f %.4f %.4f %.1f scroll=%.1f scale=%.3f stream=%d bar=%d\n", CFG_VER, color.r, color.g, color.b, opacity, CHARS_PER_SEC, SCROLL_PX_PER_SEC, BAR_SCALE, streamOn and 1 or 0, barOn and 1 or 0))
+  file:write(string.format("v%d %.4f %.4f %.4f %.4f %.1f scroll=%.1f scale=%.3f stream=%d bar=%d", CFG_VER, color.r, color.g, color.b, opacity, CHARS_PER_SEC, SCROLL_PX_PER_SEC, BAR_SCALE, streamOn and 1 or 0, barOn and 1 or 0))
+  file:write(rowToken(1) .. rowToken(2) .. "\n")
   file:close()
 end
 
@@ -89,6 +101,14 @@ local function loadCfg()
   local scale = string.match(text or "", "scale=([%d%.]+)")
   if scale ~= nil then
     BAR_SCALE = clamp(tonumber(scale) or BAR_SCALE, MIN_SCALE, MAX_SCALE)
+  end
+  local ri = 1
+  while ri <= 2 do
+    local rx, ry = string.match(text or "", "r" .. ri .. "=(%-?[%d%.]+),(%-?[%d%.]+)")
+    if rx ~= nil and tonumber(rx) ~= nil and tonumber(ry) ~= nil then
+      rowPos[ri] = { x = tonumber(rx), y = tonumber(ry) }
+    end
+    ri = ri + 1
   end
   if tonumber(ver) < CFG_VER or scroll == nil or scale == nil then
     saveCfg()
@@ -518,6 +538,11 @@ function Stream.drawSettings()
       end)
     end
     ImGui.Text(string.format("%.0f%% of default", BAR_SCALE * 100))
+    label("Position")
+    ImGui.Text("Drag a row on screen while this overlay is open.")
+    if ImGui.Button("Reset row positions") then
+      Stream.resetRows()
+    end
 
     ImGui.Spacing()
     section("QUICKHACK CONSOLE")
@@ -587,6 +612,30 @@ function Stream.drawSettings()
     end
   end
   ImGui.End()
+end
+
+function Stream.rowPos(index)
+  return rowPos[index]
+end
+
+function Stream.setRowPos(index, x, y, save)
+  if index ~= 1 and index ~= 2 or type(x) ~= "number" or type(y) ~= "number" then
+    return
+  end
+  rowPos[index] = { x = x, y = y }
+  if save then
+    saveCfg()
+  end
+end
+
+function Stream.saveRows()
+  saveCfg()
+end
+
+function Stream.resetRows()
+  rowPos[1] = nil
+  rowPos[2] = nil
+  saveCfg()
 end
 
 function Stream.invalidate()

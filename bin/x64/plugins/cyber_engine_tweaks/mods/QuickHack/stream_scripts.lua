@@ -701,45 +701,63 @@ local function create()
     }, "TARGET ROUTINE RETURNED")
   end)
 
-  local FAIL = {}
+  -- RAM-fail output: nothing is sent. The allocation stops at the first X
+  -- in the RAM bar and the line after it calls out the missing memory.
+  local FAIL_TARGET = {
+    memorywipe = "wipe.pages",
+    overheat = "heat.cycle",
+    shortcircuit = "vbus.arm",
+    synapse = "synapse.lock",
+    rebootoptics = "optics.boot",
+    weaponglitch = "weapon.jam",
+    cyberware = "cyberware.bus",
+    systemreset = "cpu.reset",
+    suicide = "proc.term",
+    detonate = "fuse.arm",
+    cripple = "motor.lock",
+    ping = "net.probe",
+    whistle = "beacon.tx",
+    contagion = "payload.seed",
+    sonic = "sonic.burst",
+    backup = "backup.call",
+    camera = "feed.cut",
+    turret = "turret.iff",
+    distract = "decoy.emit",
+    explode = "charge.arm",
+    vehicle = "can.bus",
+    unlock = "latch.open",
+    overload = "rail.surge",
+    control = "ice.breach",
+    generic = "job.alloc",
+  }
 
-  local function addFail(family, fn)
-    local list = FAIL[family]
-    if list == nil then
-      list = {}
-      FAIL[family] = list
+  local function whole(n)
+    if type(n) ~= "number" then
+      return 0
     end
-    list[#list + 1] = fn
+    n = math.floor(n + 0.001)
+    if n < 0 then
+      return 0
+    end
+    return n
   end
 
-  local function failbar(filled, width)
-    width = width or 16
-    if filled < 0 then
-      filled = 0
-    end
-    if filled > width then
-      filled = width
-    end
-    if filled >= width then
-      return "[" .. string.rep("#", width - 1) .. "X]"
-    end
-    if filled <= 0 then
-      return "[X" .. string.rep(".", width - 1) .. "]"
-    end
-    return "[" .. string.rep("#", filled) .. "X" .. string.rep(".", width - filled - 1) .. "]"
-  end
+  local FAIL_CALLER = {
+    contagion = "contagion.spread",
+    memorywipe = "memorywipe.run",
+    overheat = "overheat.burn",
+    shortcircuit = "shortcircuit.zap",
+    synapse = "synapse.burn",
+    ping = "ping.sweep",
+  }
 
-  local function ramPair(available, cost)
-    local a = available
-    local c = cost
-    if type(a) ~= "number" then
-      a = 0
-    end
-    if type(c) ~= "number" then
-      c = 0
-    end
-    a = math.floor(a + 0.001)
-    c = math.floor(c + 0.001)
+  local function writeFail(title, available, cost)
+    local family = familyOf(title)
+    local target = FAIL_TARGET[family] or FAIL_TARGET.generic
+    local caller = FAIL_CALLER[family] or (family .. ".run")
+    local a = whole(available)
+    local c = whole(cost)
+    local short = c - a
     local maxv = c
     if a > maxv then
       maxv = a
@@ -747,284 +765,67 @@ local function create()
     if maxv < 1 then
       maxv = 1
     end
-    local function line(name, value, tag)
-      local filled = math.floor(16 * value / maxv + 0.5)
-      return "    " .. pad(name, 5) .. " " .. failbar(filled, 16) .. "  " .. tostring(value) .. "U  " .. tag
+    local filled = math.floor(16 * a / maxv + 0.5)
+    if filled > 15 then
+      filled = 15
     end
-    return line("ram", a, "LOW"), line("cost", c, "HELD")
+    local base = math.random(0x10001000, 0x7FFF0000)
+    base = base - (base % 16)
+    local fault = base + a
+    local hex = function(n) return string.format("0x%08X", n) end
+
+    -- One cell per RAM unit of cost. Long costs show a 12-cell window that
+    -- always contains the first unallocated cell.
+    local first = 0
+    if c > 12 and a > 8 then
+      first = a - 8
+    end
+    local last = c - 1
+    if last > first + 11 then
+      last = first + 11
+    end
+    local prefix = "  map      " .. hex(base + first) .. "  "
+    if first > 0 then
+      prefix = prefix .. ".."
+    end
+    local cells = {}
+    local caretCol = #prefix + 1
+    local i = first
+    while i <= last do
+      if i == a then
+        caretCol = #prefix + #table.concat(cells) + 3
+      end
+      if i < a then
+        cells[#cells + 1] = "[###]"
+      else
+        cells[#cells + 1] = "[ ? ]"
+      end
+      i = i + 1
+    end
+    local mapLine = prefix .. table.concat(cells)
+    if last < c - 1 then
+      mapLine = mapLine .. ".."
+    end
+    local caretLine = string.rep(" ", caretCol - 1) .. "^ " .. hex(fault) .. "  UNALLOCATED"
+
+    return {
+      "  $ qh exec " .. banner(title) .. " --at " .. hex(base),
+      "  ram    [" .. string.rep("#", filled) .. "X",
+      "  !!!!!!!! FATAL: UNALLOCATED RAM !!!!!!!!",
+      "  SIGSEGV  heap fault at " .. hex(fault),
+      "  alloc    " .. target .. "  req " .. tostring(c) .. "U  have " .. tostring(a) .. "U  short " .. tostring(short) .. "U",
+      mapLine,
+      caretLine,
+      "  trace",
+      "    #0  " .. hex(fault) .. "  " .. target .. string.format("+0x%02X", a) .. "   <-- NO RAM",
+      "    #1  " .. hex(base - 0x28) .. "  " .. caller .. "+0x1C",
+      "    #2  " .. hex(base - 0xA0) .. "  qh.exec+0x40",
+      "    #3  " .. hex(base - 0xB0) .. "  daemon.main",
+      "  !!!!!!!! RAM SHORTAGE  " .. tostring(short) .. "U MISSING !!!!!!!!",
+      "  exit 12  SIGSEGV",
+      "  $",
+    }
   end
-
-  local function failScript(title, art, message)
-    return script(title, art, message, { exit = "12", zeros = true, hexlines = 2 })
-  end
-
-  addFail("memorywipe", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    page  0  " .. failbar(16) .. "  LIVE",
-      "    page  1  " .. failbar(16) .. "  LIVE",
-      "    wipe  " .. failbar(0) .. "  ABORT",
-    }, "WIPE ABORTED - NO MEMORY")
-  end)
-
-  addFail("overheat", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    fan   " .. failbar(0) .. "  NO START",
-      "    temp  " .. failbar(1) .. "  COLD",
-      "    rail  --x--  HOLD",
-    }, "HEAT CYCLE ABORTED - NO MEMORY")
-  end)
-
-  addFail("shortcircuit", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    vbus  OPEN --x--  NO ARM",
-      "    spark x",
-      "    prot  " .. failbar(0) .. "  HOLD",
-    }, "BUS NOT ARMED - NO MEMORY")
-  end)
-
-  addFail("synapse", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    sig   ----------x----------",
-      "    thr   " .. failbar(0) .. "  NO LOCK",
-    }, "SYNAPSE LOCK ABORTED - NO MEMORY")
-  end)
-
-  addFail("rebootoptics", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    vis   +----------------+",
-      "          |  STILL LIVE X  |",
-      "          +----------------+",
-      "    boot  " .. failbar(0) .. "  ABORT",
-    }, "OPTICS REBOOT ABORTED - NO MEMORY")
-  end)
-
-  addFail("weaponglitch", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    fire  [>X              ]  NO JAM",
-      "    bolt  --------x--------  HOLD",
-    }, "GLITCH NOT ISSUED - NO MEMORY")
-  end)
-
-  addFail("cyberware", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    fw    " .. failbar(16) .. "  INTACT",
-      "    i2c   * --x-- * --x-- *  NO SEIZE",
-    }, "CYBERWARE BUS UNTOUCHED - NO MEMORY")
-  end)
-
-  addFail("systemreset", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    cpu0  " .. failbar(16) .. "  RUN",
-      "    cpu1  " .. failbar(16) .. "  RUN",
-      "    boot  [XXXX            ]  ABORT",
-    }, "RESET ABORTED - NO MEMORY")
-  end)
-
-  addFail("suicide", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    proc  " .. failbar(16) .. "  ALIVE",
-      "    sig   " .. failbar(0) .. "  NO TERM",
-    }, "HALT REFUSED - NO MEMORY")
-  end)
-
-  addFail("detonate", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    t-3   " .. failbar(0) .. "  HOLD",
-      "    fuse  --x--  ABORT",
-    }, "FUSE NOT ARMED - NO MEMORY")
-  end)
-
-  addFail("cripple", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    Lhip  " .. failbar(16) .. "  FREE",
-      "    gait  -- -- -- --  NO LOCK",
-    }, "MOTORS UNTOUCHED - NO MEMORY")
-  end)
-
-  addFail("ping", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    hop 1  * --x  TIMEOUT",
-      "    hop 2  x      NO ROUTE",
-      "    loss  " .. failbar(16) .. "  100%",
-    }, "PING UNREACHABLE - NO MEMORY")
-  end)
-
-  addFail("whistle", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    call  x    x    x    x  MUTE",
-      "    tx    " .. failbar(0) .. "  UNSENT",
-    }, "BEACON UNSENT - NO MEMORY")
-  end)
-
-  addFail("contagion", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "        A x    x B",
-      "          |      |",
-      "        C x    x D",
-      "    spread " .. failbar(0) .. "  0%",
-      "    hosts  0 / 4  CLEAN",
-    }, "PAYLOAD NOT SEEDED - NO MEMORY")
-  end)
-
-  addFail("sonic", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "     2k  x",
-      "     4k  x",
-      "     8k  x",
-      "    hz    " .. failbar(0) .. "  MUTE",
-    }, "SONIC BURST ABORTED - NO MEMORY")
-  end)
-
-  addFail("backup", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    node  *  x  *  x  *",
-      "    call  " .. failbar(0) .. "  UNSENT",
-      "    units 0 / 3  NONE",
-    }, "BACKUP NOT CALLED - NO MEMORY")
-  end)
-
-  addFail("camera", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    feed  +----------------+",
-      "          |  STILL LIVE X  |",
-      "          +----------------+",
-      "    link  " .. failbar(16) .. "  UP",
-    }, "CAMERA STILL LIVE - NO MEMORY")
-  end)
-
-  addFail("turret", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    aim   --x--  NO LOCK",
-      "    iff   " .. failbar(16) .. "  INTACT",
-      "    fire  " .. failbar(0) .. "  HOLD",
-    }, "TURRET UNTOUCHED - NO MEMORY")
-  end)
-
-  addFail("distract", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    decoy x     x     x  DEAD",
-      "    noise " .. failbar(0) .. "  MUTE",
-    }, "DECOY UNSENT - NO MEMORY")
-  end)
-
-  addFail("explode", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    cell  [##X.] [##X.] [##X.]  HOLD",
-      "    arm   " .. failbar(0) .. "  COLD",
-    }, "CHARGE NOT ARMED - NO MEMORY")
-  end)
-
-  addFail("vehicle", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    can   ECU --x-- BRK  INTACT",
-      "    ctl   " .. failbar(0) .. "  NO TAKE",
-    }, "VEHICLE BUS UNTOUCHED - NO MEMORY")
-  end)
-
-  addFail("unlock", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    latch [<<<<<<X........]  SEALED",
-      "    bolt  " .. failbar(16) .. "  LOCKED",
-    }, "LATCH STILL SEALED - NO MEMORY")
-  end)
-
-  addFail("overload", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    railA " .. failbar(2) .. "  NOMINAL",
-      "    draw  " .. failbar(0) .. "  NO SURGE",
-    }, "RAILS NOT OVERLOADED - NO MEMORY")
-  end)
-
-  addFail("control", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    ICE   ################",
-      "          ################  SEALED",
-      "    hole  " .. failbar(0) .. "  CLOSED",
-    }, "ICE WALL INTACT - NO MEMORY")
-  end)
-
-  addFail("generic", function(title, available, cost)
-    local ram, need = ramPair(available, cost)
-    return failScript(title, {
-      ram,
-      need,
-      "    path  * --x  *    *",
-      "    job   " .. failbar(0) .. "  ABORT",
-      "    ret   0x0C  FAIL",
-    }, "EXECUTION REFUSED - NO MEMORY")
-  end)
 
   local function write(title)
     local family = familyOf(title)
@@ -1033,15 +834,6 @@ local function create()
       variants = CATALOG.generic
     end
     return variants[math.random(1, #variants)](title)
-  end
-
-  local function writeFail(title, available, cost)
-    local family = familyOf(title)
-    local variants = FAIL[family]
-    if variants == nil then
-      variants = FAIL.generic
-    end
-    return variants[math.random(1, #variants)](title, available, cost)
   end
 
   return { write = write, writeFail = writeFail }

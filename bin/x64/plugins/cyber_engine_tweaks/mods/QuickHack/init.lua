@@ -60,27 +60,30 @@ do
   end
 end
 
+-- Hotkeys (not inputs) so every slot can take a combo such as Ctrl+1.
+local SLOT_KEYS = 18
 local slot = 1
-while slot <= 9 do
+while slot <= SLOT_KEYS do
   local index = slot
-  local ok, err = pcall(registerInput, "QuickHackSlot" .. index, "Quickhack " .. index, function(keypress)
-    if not keypress then
-      return
-    end
+  local ok, err = pcall(registerHotkey, "QuickHackSlot" .. index, "Quickhack " .. index, function()
     Cast.tryCast(index)
   end)
   if not ok then
-    print("QuickHack: registerInput failed: " .. tostring(err))
+    print("QuickHack: registerHotkey failed: " .. tostring(err))
     break
   end
   slot = slot + 1
 end
 
+pcall(registerHotkey, "QuickHackToggleBar", "Show / hide quickhack bar", function()
+  Stream.setBarOn(not Stream.isBarOn())
+end)
+
 registerForEvent("onInit", function()
   Cast.install()
   Target.install()
   Hud.install()
-  print("QuickHack ready build 79")
+  print("QuickHack ready build 80")
 end)
 
 registerForEvent("onOverlayOpen", function()
@@ -141,6 +144,11 @@ registerForEvent("onDraw", function()
   pcall(function()
     Stream.drawSettings()
   end)
+  if Stream.isBarOn() then
+    pcall(function()
+      Hud.drawArrange()
+    end)
+  end
 end)
 
 registerForEvent("onShutdown", function()

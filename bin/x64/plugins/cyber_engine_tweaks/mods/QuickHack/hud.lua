@@ -2,7 +2,10 @@ local Target = require("target")
 
 local Hud = {}
 
-local SLOT_COUNT = 9
+local SLOT_COUNT = 18
+local ROW_SIZE = 9
+local ROW_GAP = 132
+local ROW_H = 126
 local ICON = 56
 local ICON_Y = 18
 local NUMBER_Y = 76
@@ -24,6 +27,9 @@ local canvas = nil
 local parent = nil
 local slots = {}
 local overflow = nil
+local twoRows = false
+local arranging = false
+local layoutKey = nil
 local built = false
 local lastGen = -1
 local inkController = nil
@@ -184,7 +190,7 @@ local function applyIcon(slot, command)
   slot.icon = nil
   slot.iconKey = nil
   local okLib, reason = pcall(function()
-    return QuickHackIcons.LibraryReason(inkController or inkSpawner, canvas, command, slot.index, slot.x + sc(10), sc(ICON_Y), scInt(ICON))
+    return QuickHackIcons.LibraryReason(inkController or inkSpawner, canvas, command, slot.index, slot.x + sc(10), (slot.y or 0) + sc(ICON_Y), scInt(ICON))
   end)
   if not okLib then
     reason = "error " .. tostring(reason)
@@ -340,15 +346,51 @@ local function currentScale()
   return clamp(scale, MIN_SCALE, MAX_SCALE)
 end
 
+local function streamMod()
+  local ok, mod = pcall(require, "stream")
+  if ok and type(mod) == "table" then
+    return mod
+  end
+  return nil
+end
+
+local function rowOf(index)
+  if index > ROW_SIZE then
+    return 2
+  end
+  return 1
+end
+
+-- Row origin in ink units inside the bar canvas. Row 2 sits in the bar's
+-- usual spot and row 1 lifts above it whenever two rows are showing or the
+-- overlay is open for arranging. A dragged row keeps its saved position.
+local function rowOrigin(row)
+  local mod = streamMod()
+  if mod ~= nil and type(mod.rowPos) == "function" then
+    local pos = mod.rowPos(row)
+    if pos ~= nil then
+      return pos.x, pos.y
+    end
+  end
+  if row == 1 and (twoRows or arranging) then
+    return 0, -sc(ROW_GAP)
+  end
+  return 0, 0
+end
+
 local function layoutSlot(slot, ox)
   if slot == nil then
     return
   end
   ox = ox or 0
-  local x = sc((slot.index - 1) * STRIDE)
+  local rx, ry = rowOrigin(rowOf(slot.index))
+  local col = (slot.index - 1) % ROW_SIZE
+  local x = rx + sc(col * STRIDE)
+  local y = ry
   slot.x = x
+  slot.y = y
   local frameX = x + sc(8) + ox
-  local frameY = sc(ICON_Y - 2)
+  local frameY = y + sc(ICON_Y - 2)
   local frameW = sc(ICON + 4)
   local frameH = sc(ICON + 4)
   local thickness = scInt(2)
@@ -371,15 +413,15 @@ local function layoutSlot(slot, ox)
   end
   local textX = x + ox
   if slot.ramText ~= nil then
-    place(slot.ramText, textX, sc(RAM_Y), sc(SLOT_W), sc(16))
+    place(slot.ramText, textX, y + sc(RAM_Y), sc(SLOT_W), sc(16))
     slot.ramText:SetFontSize(scInt(14))
   end
   if slot.number ~= nil then
-    place(slot.number, textX, sc(NUMBER_Y), sc(SLOT_W), sc(18))
+    place(slot.number, textX, y + sc(NUMBER_Y), sc(SLOT_W), sc(18))
     slot.number:SetFontSize(scInt(18))
   end
   if slot.title ~= nil then
-    place(slot.title, textX, sc(TITLE_Y), sc(SLOT_W), sc(30))
+    place(slot.title, textX, y + sc(TITLE_Y), sc(SLOT_W), sc(30))
     slot.title:SetFontSize(scInt(13))
     pcall(function()
       slot.title:SetWrapping(true, sc(SLOT_W))
@@ -387,7 +429,7 @@ local function layoutSlot(slot, ox)
   end
   if slot.icon ~= nil then
     pcall(function()
-      place(slot.icon, x + sc(10) + ox, sc(ICON_Y), sc(ICON), sc(ICON))
+      place(slot.icon, x + sc(10) + ox, y + sc(ICON_Y), sc(ICON), sc(ICON))
     end)
   end
 end
@@ -396,7 +438,8 @@ local function layoutOverflow()
   if overflow == nil then
     return
   end
-  place(overflow, sc(756), sc(NUMBER_Y), sc(SLOT_W), sc(18))
+  local rx, ry = rowOrigin(twoRows and 2 or 1)
+  place(overflow, rx + sc(756), ry + sc(NUMBER_Y), sc(SLOT_W), sc(18))
   overflow:SetFontSize(scInt(18))
 end
 
@@ -416,6 +459,42 @@ local function layoutBar()
     i = i + 1
   end
   layoutOverflow()
+end
+
+local function relayoutRows()
+  local i = 1
+  while i <= SLOT_COUNT do
+    if slots[i] ~= nil then
+      layoutSlot(slots[i], 0)
+    end
+    i = i + 1
+  end
+  layoutOverflow()
+end
+
+local function updateLayoutMode(count)
+  local overlayOpen = false
+  pcall(function()
+    overlayOpen = require("cast").isOverlay() == true
+  end)
+  twoRows = count > ROW_SIZE
+  arranging = overlayOpen
+  local mod = streamMod()
+  local key = tostring(twoRows) .. tostring(arranging)
+  if mod ~= nil and type(mod.rowPos) == "function" then
+    local a = mod.rowPos(1)
+    local b = mod.rowPos(2)
+    if a ~= nil then
+      key = key .. string.format("|%.1f,%.1f", a.x, a.y)
+    end
+    if b ~= nil then
+      key = key .. string.format("|%.1f,%.1f", b.x, b.y)
+    end
+  end
+  if key ~= layoutKey then
+    layoutKey = key
+    relayoutRows()
+  end
 end
 
 local function applyFx(slot)
@@ -750,6 +829,7 @@ local function teardown()
   built = false
   lastGen = -1
   hosted = false
+  layoutKey = nil
 end
 
 function Hud.invalidate()
@@ -791,6 +871,7 @@ function Hud.refresh()
   local list = Target.getCommands()
   local count = #list
   local gen = Target.getGeneration()
+  pcall(updateLayoutMode, count)
   if count == 0 then
     local i = 1
     while i <= SLOT_COUNT do
@@ -824,9 +905,9 @@ function Hud.refresh()
       i = i + 1
     end
 
-    if count > 9 then
+    if count > SLOT_COUNT then
       pcall(function()
-        overflow:SetText("+" .. tostring(count - 9))
+        overflow:SetText("+" .. tostring(count - SLOT_COUNT))
         overflow:SetVisible(true)
       end)
     else
@@ -907,6 +988,93 @@ function Hud.tick(dt)
     end
     i = i + 1
   end
+end
+
+-- Overlay drag handles, one per bar row. Ink HUD units are 3840x2160 scaled
+-- to the screen; deltas are converted back so the row follows the mouse.
+local dragState = {}
+local resolutionPrinted = false
+local dragErrorPrinted = false
+
+local function inkScale()
+  local ok, w, h = pcall(function()
+    return GetDisplayResolution()
+  end)
+  if not ok or type(w) ~= "number" or type(h) ~= "number" or w <= 0 or h <= 0 then
+    if not resolutionPrinted then
+      resolutionPrinted = true
+      print("QuickHack: display resolution unavailable, row dragging off")
+    end
+    return nil
+  end
+  local s = h / 2160
+  if w / h < 16 / 9 then
+    s = w / 3840
+  end
+  return s, w, h
+end
+
+local function rowHandle(row, s, w, h, flags)
+  local rx, ry = rowOrigin(row)
+  local left = w * 0.5 - sc(BAR_W) * s * 0.5 + rx * s
+  local top = h - (128 + sc(BAR_H)) * s + ry * s
+  local width = sc(BAR_W) * s
+  local height = sc(ROW_H) * s
+  ImGui.SetNextWindowPos(left, top, ImGuiCond.Always)
+  ImGui.SetNextWindowSize(width, height, ImGuiCond.Always)
+  pcall(function()
+    ImGui.SetNextWindowBgAlpha(0.18)
+  end)
+  local visible = ImGui.Begin("##QuickHackRow" .. row, flags)
+  local okBody, bodyErr = pcall(function()
+    if visible == false then
+      return
+    end
+    ImGui.Text("QUICKHACK ROW " .. row .. "  -  drag to move")
+    ImGui.SetCursorPos(0, 0)
+    ImGui.InvisibleButton("##QuickHackRowDrag" .. row, width, height)
+    local active = ImGui.IsItemActive() == true
+    if active then
+      local dx, dy = ImGui.GetMouseDragDelta(0, 0.0)
+      if type(dx) == "number" and type(dy) == "number" and (dx ~= 0 or dy ~= 0) then
+        ImGui.ResetMouseDragDelta(0)
+        local mod = streamMod()
+        if mod ~= nil and type(mod.setRowPos) == "function" then
+          mod.setRowPos(row, rx + dx / s, ry + dy / s, false)
+        end
+      end
+    elseif dragState[row] then
+      local mod = streamMod()
+      if mod ~= nil and type(mod.saveRows) == "function" then
+        mod.saveRows()
+      end
+    end
+    dragState[row] = active
+  end)
+  ImGui.End()
+  if not okBody and not dragErrorPrinted then
+    dragErrorPrinted = true
+    print("QuickHack: row drag failed: " .. tostring(bodyErr))
+  end
+end
+
+function Hud.drawArrange()
+  if ImGui == nil then
+    return
+  end
+  local okCast, isOpen = pcall(function()
+    return require("cast").isOverlay() == true
+  end)
+  if not okCast or not isOpen then
+    return
+  end
+  local s, w, h = inkScale()
+  if s == nil then
+    return
+  end
+  local flags = ImGuiWindowFlags.NoTitleBar + ImGuiWindowFlags.NoResize + ImGuiWindowFlags.NoMove + ImGuiWindowFlags.NoScrollbar + ImGuiWindowFlags.NoCollapse + ImGuiWindowFlags.NoSavedSettings
+  rowHandle(1, s, w, h, flags)
+  rowHandle(2, s, w, h, flags)
 end
 
 return Hud
