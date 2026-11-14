@@ -833,7 +833,6 @@ local function create()
   local function writeBlocked(title, reason)
     local family = familyOf(title)
     local target = FAIL_TARGET[family] or FAIL_TARGET.generic
-    local caller = FAIL_CALLER[family] or (family .. ".run")
     local base = math.random(0x10001000, 0x7FFF0000)
     base = base - (base % 16)
     local hex = function(n) return string.format("0x%08X", n) end
@@ -847,14 +846,6 @@ local function create()
       "  !!!!!!!! FATAL: EXECUTION BLOCKED !!!!!!!!",
       "  EBUSY    lock held on " .. target .. " at " .. hex(base),
       "  reason   " .. string.upper(why),
-      "  trace",
-      "    #0  " .. hex(base) .. "  " .. target .. "+0x00   <-- LOCKED",
-      "    #1  " .. hex(base - 0x28) .. "  " .. caller .. "+0x1C",
-      "    #2  " .. hex(base - 0xA0) .. "  qh.exec+0x40",
-      "    #3  " .. hex(base - 0xB0) .. "  daemon.main",
-      "  !!!!!!!! EXEC LOCK HELD  " .. string.upper(why) .. " !!!!!!!!",
-      "  exit 16  EBUSY",
-      "  $",
     }
   end
 
