@@ -50,7 +50,7 @@ end
 
 -- Bar row positions in HUD units, offset from the bar's usual spot; nil = default.
 local rowPos = {}
-local ROW_GAP = 72
+local ROW_GAP = 100
 local ROW_X_MIN = -1920
 local ROW_X_MAX = 1920
 local ROW_Y_MIN = -2040
@@ -630,7 +630,7 @@ function Stream.rowPos(index)
 end
 
 -- Row position shown in the overlay: saved value or the default stack
--- (row 1 in the bar's usual spot, row 2 72 units below it).
+-- (row 1 in the bar's usual spot, row 2 100 units below it).
 function Stream.rowXY(index)
   local pos = rowPos[index]
   if pos ~= nil then

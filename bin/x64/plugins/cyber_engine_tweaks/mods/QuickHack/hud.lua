@@ -4,7 +4,7 @@ local Hud = {}
 
 local SLOT_COUNT = 18
 local ROW_SIZE = 9
-local ROW_GAP = 72
+local ROW_GAP = 100
 local ROW_H = 126
 local ICON = 56
 local ICON_Y = 18
@@ -1049,10 +1049,12 @@ local function inkScale()
     return nil
   end
   local s = h / 2160
+  local bottom = h
   if w / h < 16 / 9 then
     s = w / 3840
+    bottom = h - (h - 2160 * s) * 0.5
   end
-  return s, w, h
+  return s, w, h, bottom
 end
 
 -- Screen rectangle of a row's frames (not its titles), so the grab area is
@@ -1060,7 +1062,7 @@ end
 local function rowRect(row, s, w, h)
   local rx, ry = rowOrigin(row)
   local left = w * 0.5 - sc(BAR_W) * s * 0.5 + (rx + sc(8)) * s
-  local top = h - (128 + sc(BAR_H)) * s + (ry + sc(ICON_Y - 2)) * s
+  local top = (drag.bottom or h) - (128 + sc(BAR_H)) * s + (ry + sc(ICON_Y - 2)) * s
   local width = (sc((ROW_SIZE - 1) * STRIDE) + sc(ICON + 4)) * s
   return left, top, width, sc(ICON + 4) * s
 end
@@ -1108,10 +1110,11 @@ function Hud.drawDrag()
     heldRow = nil
     return
   end
-  local s, w, h = inkScale()
+  local s, w, h, bottom = inkScale()
   if s == nil then
     return
   end
+  drag.bottom = bottom
   local flags = ImGuiWindowFlags.NoTitleBar + ImGuiWindowFlags.NoResize + ImGuiWindowFlags.NoMove
     + ImGuiWindowFlags.NoScrollbar + ImGuiWindowFlags.NoCollapse + ImGuiWindowFlags.NoSavedSettings
     + ImGuiWindowFlags.NoBackground + ImGuiWindowFlags.NoBringToFrontOnFocus + ImGuiWindowFlags.NoFocusOnAppearing
@@ -1141,7 +1144,7 @@ function Hud.drawDrag()
       if not dragPrinted then
         dragPrinted = true
         local l, t, rw, rh = rowRect(drag.row or 1, s, w, h)
-        print(string.format("QuickHack: drag res %dx%d scale %.4f mouse %.0f,%.0f row %s rect %.0f,%.0f %.0fx%.0f", w, h, s, mx, my, tostring(drag.row), l, t, rw, rh))
+        print(string.format("QuickHack: drag res %dx%d scale %.4f bottom %.0f mouse %.0f,%.0f row %s rect %.0f,%.0f %.0fx%.0f", w, h, s, bottom, mx, my, tostring(drag.row), l, t, rw, rh))
       end
     elseif active and drag.row ~= nil then
       local dx = mx - drag.lastX
