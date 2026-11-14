@@ -752,79 +752,56 @@ local function create()
   }
 
   local function writeFail(title, available, cost)
-    local family = familyOf(title)
-    local target = FAIL_TARGET[family] or FAIL_TARGET.generic
-    local caller = FAIL_CALLER[family] or (family .. ".run")
-    local a = whole(available)
     local c = whole(cost)
+    local have = tonumber(available) or 0
+    if have < 0 then
+      have = 0
+    end
+    local a = whole(available)
+    if a > c then
+      a = c
+    end
     local short = c - a
-    local maxv = c
-    if a > maxv then
-      maxv = a
-    end
-    if maxv < 1 then
-      maxv = 1
-    end
-    local filled = math.floor(16 * a / maxv + 0.5)
-    if filled > 15 then
-      filled = 15
-    end
+    local WIDTH = 32
     local base = math.random(0x10001000, 0x7FFF0000)
     base = base - (base % 16)
-    local fault = base + a
     local hex = function(n) return string.format("0x%08X", n) end
 
-    -- One cell per RAM unit of cost. Long costs show a 12-cell window that
-    -- always contains the first unallocated cell.
-    local first = 0
-    if c > 12 and a > 8 then
-      first = a - 8
+    local lines = {
+      "  $ qh exec " .. banner(title) .. " --at " .. hex(base),
+      "  running...",
+      "  ram alloc",
+    }
+    -- One line per RAM unit of cost. A fractional unit of RAM partly fills
+    -- the first missing line. Very large costs fold the tail into one line.
+    local MAX_ROWS = 12
+    local shown = c
+    if shown > MAX_ROWS then
+      shown = MAX_ROWS
     end
-    local last = c - 1
-    if last > first + 11 then
-      last = first + 11
-    end
-    local prefix = "  map      " .. hex(base + first) .. "  "
-    if first > 0 then
-      prefix = prefix .. ".."
-    end
-    local cells = {}
-    local caretCol = #prefix + 1
-    local i = first
-    while i <= last do
-      if i == a then
-        caretCol = #prefix + #table.concat(cells) + 3
-      end
+    local partial = have - math.floor(have)
+    local i = 0
+    while i < shown do
+      local filled = 0
+      local mark = "[XX]"
       if i < a then
-        cells[#cells + 1] = "[###]"
-      else
-        cells[#cells + 1] = "[ ? ]"
+        filled = WIDTH
+        mark = "[OK]"
+      elseif i == a and partial > 0 then
+        filled = math.floor(WIDTH * partial)
       end
+      lines[#lines + 1] = "    " .. hex(base + i) .. " [" .. string.rep("#", filled) .. string.rep(".", WIDTH - filled) .. "] " .. mark
       i = i + 1
     end
-    local mapLine = prefix .. table.concat(cells)
-    if last < c - 1 then
-      mapLine = mapLine .. ".."
+    if c > shown then
+      local more = "    .. +" .. tostring(c - shown) .. " more"
+      lines[#lines + 1] = more .. string.rep(" ", 16 + WIDTH + 2 - #more) .. "[XX]"
     end
-    local caretLine = string.rep(" ", caretCol - 1) .. "^ " .. hex(fault) .. "  UNALLOCATED"
-
-    return {
-      "  $ qh exec " .. banner(title) .. " --at " .. hex(base),
-      "  ram    [" .. string.rep("#", filled) .. "X",
-      "  !!!!!!!! FATAL: UNALLOCATED RAM !!!!!!!!",
-      "  SIGSEGV  heap fault at " .. hex(fault),
-      "  alloc    " .. target .. "  req " .. tostring(c) .. "U  have " .. tostring(a) .. "U  short " .. tostring(short) .. "U",
-      mapLine,
-      caretLine,
-      "  trace",
-      "    #0  " .. hex(fault) .. "  " .. target .. string.format("+0x%02X", a) .. "   <-- NO RAM",
-      "    #1  " .. hex(base - 0x28) .. "  " .. caller .. "+0x1C",
-      "    #2  " .. hex(base - 0xA0) .. "  qh.exec+0x40",
-      "    #3  " .. hex(base - 0xB0) .. "  daemon.main",
-      "  !!!!!!!! RAM SHORTAGE  " .. tostring(short) .. "U MISSING !!!!!!!!",
-      "  exit 12  SIGSEGV",
-      "  $",
-    }
+    lines[#lines + 1] = "  >>> FATAL  INSUFFICIENT RAM ALLOCATED"
+    lines[#lines + 1] = "  >>> cost " .. tostring(c) .. "U   have " .. tostring(a) .. "U   short " .. tostring(short) .. "U"
+    lines[#lines + 1] = "  >>> exit 12"
+    lines[#lines + 1] = "  $"
+    return lines
   end
 
   -- The game refused the hack for a reason other than RAM: cooldown, already
