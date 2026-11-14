@@ -1062,7 +1062,9 @@ end
 local function rowRect(row, s, w, h)
   local rx, ry = rowOrigin(row)
   local left = w * 0.5 - sc(BAR_W) * s * 0.5 + (rx + sc(8)) * s
-  local top = (drag.bottom or h) - (128 + sc(BAR_H)) * s + (ry + sc(ICON_Y - 2)) * s
+  -- Measured in game at 1920x1080: the visible frames sit about 140 HUD units
+  -- above where the bottom-anchored layout math puts them.
+  local top = (drag.bottom or h) - (128 + 140 + sc(BAR_H)) * s + (ry + sc(ICON_Y - 2)) * s
   local width = (sc((ROW_SIZE - 1) * STRIDE) + sc(ICON + 4)) * s
   return left, top, width, sc(ICON + 4) * s
 end
@@ -1092,7 +1094,7 @@ local function pickRow(mx, my, s, w, h)
     end
     row = row + 1
   end
-  if bestDist ~= nil and bestDist > (sc(BAR_W) * s) ^ 2 then
+  if bestDist ~= nil and bestDist > (8 * s) ^ 2 then
     return nil
   end
   return best
