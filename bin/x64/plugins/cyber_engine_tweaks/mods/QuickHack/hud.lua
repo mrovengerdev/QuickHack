@@ -361,18 +361,17 @@ local function rowOf(index)
   return 1
 end
 
--- Row origin in ink units inside the bar canvas. Row 2 sits in the bar's
--- usual spot and row 1 lifts above it whenever two rows are showing or the
--- overlay is open for arranging. A dragged row keeps its saved position.
+-- Row origin in HUD units, offset from the bar's usual spot. Always the
+-- same X/Y the overlay sliders show, so the preview is where the row lands.
 local function rowOrigin(row)
   local mod = streamMod()
-  if mod ~= nil and type(mod.rowPos) == "function" then
-    local pos = mod.rowPos(row)
-    if pos ~= nil then
-      return pos.x, pos.y
+  if mod ~= nil and type(mod.rowXY) == "function" then
+    local x, y = mod.rowXY(row)
+    if type(x) == "number" and type(y) == "number" then
+      return x, y
     end
   end
-  if row == 1 and (twoRows or arranging) then
+  if row == 1 then
     return 0, -sc(ROW_GAP)
   end
   return 0, 0
@@ -604,6 +603,7 @@ local function hideSlot(slot)
   end
   slot.icon = nil
   slot.iconKey = nil
+  slot.ghost = false
   if slot.number ~= nil then
     slot.number:SetVisible(false)
   end
@@ -615,7 +615,39 @@ local function hideSlot(slot)
   end
 end
 
+local function ghostSlot(slot)
+  if slot.fill ~= nil then
+    gameTint(slot.fill, false)
+    slot.fill:SetOpacity(FILL_OPACITY)
+    slot.fill:SetVisible(true)
+  end
+  eachEdge(slot, function(edge)
+    gameTint(edge, false)
+    edge:SetOpacity(0.45)
+    edge:SetVisible(true)
+  end)
+  slot.ghost = true
+end
+
+-- While the overlay is open every empty slot shows as a frame so the full
+-- 2x9 layout is visible; closing the overlay hides them again.
+local function updateGhosts(list)
+  local i = 1
+  while i <= SLOT_COUNT do
+    local slot = slots[i]
+    if slot ~= nil and list[i] == nil then
+      if arranging and not slot.ghost then
+        pcall(ghostSlot, slot)
+      elseif not arranging and slot.ghost then
+        pcall(hideSlot, slot)
+      end
+    end
+    i = i + 1
+  end
+end
+
 local function showSlot(slot, command)
+  slot.ghost = false
   local opacity = command.m_isLocked and 0.4 or 1.0
   slot.number:SetOpacity(1.0)
   slot.title:SetOpacity(opacity)
@@ -875,12 +907,15 @@ function Hud.refresh()
   if count == 0 then
     local i = 1
     while i <= SLOT_COUNT do
-      hideSlot(slots[i])
+      if not (arranging and slots[i].ghost) then
+        hideSlot(slots[i])
+      end
       i = i + 1
     end
     overflow:SetVisible(false)
-    canvas:SetVisible(false)
     lastGen = gen
+    updateGhosts(list)
+    canvas:SetVisible(arranging)
     return
   end
   local ramIndex = 1
@@ -917,6 +952,7 @@ function Hud.refresh()
     end
   end
 
+  updateGhosts(list)
   canvas:SetVisible(true)
 end
 
@@ -988,93 +1024,6 @@ function Hud.tick(dt)
     end
     i = i + 1
   end
-end
-
--- Overlay drag handles, one per bar row. Ink HUD units are 3840x2160 scaled
--- to the screen; deltas are converted back so the row follows the mouse.
-local dragState = {}
-local resolutionPrinted = false
-local dragErrorPrinted = false
-
-local function inkScale()
-  local ok, w, h = pcall(function()
-    return GetDisplayResolution()
-  end)
-  if not ok or type(w) ~= "number" or type(h) ~= "number" or w <= 0 or h <= 0 then
-    if not resolutionPrinted then
-      resolutionPrinted = true
-      print("QuickHack: display resolution unavailable, row dragging off")
-    end
-    return nil
-  end
-  local s = h / 2160
-  if w / h < 16 / 9 then
-    s = w / 3840
-  end
-  return s, w, h
-end
-
-local function rowHandle(row, s, w, h, flags)
-  local rx, ry = rowOrigin(row)
-  local left = w * 0.5 - sc(BAR_W) * s * 0.5 + rx * s
-  local top = h - (128 + sc(BAR_H)) * s + ry * s
-  local width = sc(BAR_W) * s
-  local height = sc(ROW_H) * s
-  ImGui.SetNextWindowPos(left, top, ImGuiCond.Always)
-  ImGui.SetNextWindowSize(width, height, ImGuiCond.Always)
-  pcall(function()
-    ImGui.SetNextWindowBgAlpha(0.18)
-  end)
-  local visible = ImGui.Begin("##QuickHackRow" .. row, flags)
-  local okBody, bodyErr = pcall(function()
-    if visible == false then
-      return
-    end
-    ImGui.Text("QUICKHACK ROW " .. row .. "  -  drag to move")
-    ImGui.SetCursorPos(0, 0)
-    ImGui.InvisibleButton("##QuickHackRowDrag" .. row, width, height)
-    local active = ImGui.IsItemActive() == true
-    if active then
-      local dx, dy = ImGui.GetMouseDragDelta(0, 0.0)
-      if type(dx) == "number" and type(dy) == "number" and (dx ~= 0 or dy ~= 0) then
-        ImGui.ResetMouseDragDelta(0)
-        local mod = streamMod()
-        if mod ~= nil and type(mod.setRowPos) == "function" then
-          mod.setRowPos(row, rx + dx / s, ry + dy / s, false)
-        end
-      end
-    elseif dragState[row] then
-      local mod = streamMod()
-      if mod ~= nil and type(mod.saveRows) == "function" then
-        mod.saveRows()
-      end
-    end
-    dragState[row] = active
-  end)
-  ImGui.End()
-  if not okBody and not dragErrorPrinted then
-    dragErrorPrinted = true
-    print("QuickHack: row drag failed: " .. tostring(bodyErr))
-  end
-end
-
-function Hud.drawArrange()
-  if ImGui == nil then
-    return
-  end
-  local okCast, isOpen = pcall(function()
-    return require("cast").isOverlay() == true
-  end)
-  if not okCast or not isOpen then
-    return
-  end
-  local s, w, h = inkScale()
-  if s == nil then
-    return
-  end
-  local flags = ImGuiWindowFlags.NoTitleBar + ImGuiWindowFlags.NoResize + ImGuiWindowFlags.NoMove + ImGuiWindowFlags.NoScrollbar + ImGuiWindowFlags.NoCollapse + ImGuiWindowFlags.NoSavedSettings
-  rowHandle(1, s, w, h, flags)
-  rowHandle(2, s, w, h, flags)
 end
 
 return Hud

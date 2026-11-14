@@ -48,15 +48,20 @@ local function tint()
   })
 end
 
--- Dragged bar row positions in ink units relative to the bar canvas; nil = default.
+-- Bar row positions in HUD units, offset from the bar's usual spot; nil = default.
 local rowPos = {}
+local ROW_GAP = 132
+local ROW_X_MIN = -1920
+local ROW_X_MAX = 1920
+local ROW_Y_MIN = -2040
+local ROW_Y_MAX = 128
 
 local function rowToken(index)
   local pos = rowPos[index]
   if pos == nil then
     return ""
   end
-  return string.format(" r%d=%.1f,%.1f", index, pos.x, pos.y)
+  return string.format(" p%d=%.1f,%.1f", index, pos.x, pos.y)
 end
 
 local function saveCfg()
@@ -104,7 +109,7 @@ local function loadCfg()
   end
   local ri = 1
   while ri <= 2 do
-    local rx, ry = string.match(text or "", "r" .. ri .. "=(%-?[%d%.]+),(%-?[%d%.]+)")
+    local rx, ry = string.match(text or "", "%sp" .. ri .. "=(%-?[%d%.]+),(%-?[%d%.]+)")
     if rx ~= nil and tonumber(rx) ~= nil and tonumber(ry) ~= nil then
       rowPos[ri] = { x = tonumber(rx), y = tonumber(ry) }
     end
@@ -539,7 +544,17 @@ function Stream.drawSettings()
     end
     ImGui.Text(string.format("%.0f%% of default", BAR_SCALE * 100))
     label("Position")
-    ImGui.Text("Drag a row on screen while this overlay is open.")
+    ImGui.Text("Both rows show as empty frames while this overlay is open.")
+    local ri = 1
+    while ri <= 2 do
+      local px, py = Stream.rowXY(ri)
+      local nx, xOk = slider("Row " .. ri .. " X##rowx" .. ri, px, ROW_X_MIN, ROW_X_MAX, "%.0f")
+      local ny, yOk = slider("Row " .. ri .. " Y##rowy" .. ri, py, ROW_Y_MIN, ROW_Y_MAX, "%.0f")
+      if xOk or yOk then
+        Stream.setRowPos(ri, math.floor(clamp(nx, ROW_X_MIN, ROW_X_MAX) + 0.5), math.floor(clamp(ny, ROW_Y_MIN, ROW_Y_MAX) + 0.5), true)
+      end
+      ri = ri + 1
+    end
     if ImGui.Button("Reset row positions") then
       Stream.resetRows()
     end
@@ -616,6 +631,19 @@ end
 
 function Stream.rowPos(index)
   return rowPos[index]
+end
+
+-- Row position as shown on the sliders: saved value or the default stack
+-- (row 1 one row above the bar's usual spot, row 2 in it).
+function Stream.rowXY(index)
+  local pos = rowPos[index]
+  if pos ~= nil then
+    return pos.x, pos.y
+  end
+  if index == 1 then
+    return 0, -ROW_GAP * BAR_SCALE
+  end
+  return 0, 0
 end
 
 function Stream.setRowPos(index, x, y, save)
