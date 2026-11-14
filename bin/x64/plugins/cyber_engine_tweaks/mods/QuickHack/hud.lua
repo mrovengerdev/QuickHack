@@ -4,7 +4,7 @@ local Hud = {}
 
 local SLOT_COUNT = 18
 local ROW_SIZE = 9
-local ROW_GAP = 132
+local ROW_GAP = 72
 local ROW_H = 126
 local ICON = 56
 local ICON_Y = 18
@@ -372,8 +372,8 @@ local function rowOrigin(row)
       return x, y
     end
   end
-  if row == 1 then
-    return 0, -sc(ROW_GAP)
+  if row == 2 then
+    return 0, sc(ROW_GAP)
   end
   return 0, 0
 end
@@ -1055,11 +1055,14 @@ local function inkScale()
   return s, w, h
 end
 
+-- Screen rectangle of a row's frames (not its titles), so the grab area is
+-- exactly the empty frames shown while arranging.
 local function rowRect(row, s, w, h)
   local rx, ry = rowOrigin(row)
-  local left = w * 0.5 - sc(BAR_W) * s * 0.5 + rx * s
-  local top = h - (128 + sc(BAR_H)) * s + ry * s
-  return left, top, sc(BAR_W) * s, sc(BAR_H + 12) * s
+  local left = w * 0.5 - sc(BAR_W) * s * 0.5 + (rx + sc(8)) * s
+  local top = h - (128 + sc(BAR_H)) * s + (ry + sc(ICON_Y - 2)) * s
+  local width = (sc((ROW_SIZE - 1) * STRIDE) + sc(ICON + 4)) * s
+  return left, top, width, sc(ICON + 4) * s
 end
 
 local function pickRow(mx, my, s, w, h)
@@ -1087,7 +1090,7 @@ local function pickRow(mx, my, s, w, h)
     end
     row = row + 1
   end
-  if bestDist ~= nil and bestDist > (sc(ROW_GAP) * s * 2) ^ 2 then
+  if bestDist ~= nil and bestDist > (sc(ICON) * s) ^ 2 then
     return nil
   end
   return best
